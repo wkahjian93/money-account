@@ -1,0 +1,67 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Icon maker</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap" rel="stylesheet">
+<style>body{background:#222;color:#eee;font:14px sans-serif}canvas{margin:8px;border:1px solid #555}</style></head>
+<body><p id="msg">Drawing…</p><canvas id="c" width="512" height="512"></canvas>
+<script>
+// Money Account icon: gold money bag with RM on a dark vault with gold light rays. Run via serve.js at /tools/icon.html
+async function draw(S) {
+  await document.fonts.load('700 100px Cinzel');
+  const c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'); const k = S / 512;
+  g.scale(k, k);
+  // background
+  let bg = g.createRadialGradient(256, 40, 10, 256, 200, 420); bg.addColorStop(0, '#5a4214'); bg.addColorStop(.45, '#1d160b'); bg.addColorStop(1, '#0b0906');
+  g.fillStyle = bg; g.fillRect(0, 0, 512, 512);
+  g.save(); g.globalAlpha = .10; g.fillStyle = '#f6dd94';
+  for (let i = -5; i <= 5; i++) { g.beginPath(); g.moveTo(256, -40); g.lineTo(256 + i * 70 - 18, 560); g.lineTo(256 + i * 70 + 18, 560); g.closePath(); g.fill(); }
+  g.restore();
+  const gold = (y0, y1) => { const gr = g.createLinearGradient(120, y0, 400, y1); gr.addColorStop(0, '#8a6420'); gr.addColorStop(.25, '#d9b35c'); gr.addColorStop(.48, '#fbe8a8'); gr.addColorStop(.66, '#d4a94b'); gr.addColorStop(.85, '#f2d58a'); gr.addColorStop(1, '#8f6a22'); return gr; };
+  // shadow
+  g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(256, 452, 150, 22, 0, 0, Math.PI * 2); g.fill();
+  // bag body
+  g.beginPath();
+  g.moveTo(205, 168);
+  g.bezierCurveTo(120, 215, 82, 300, 98, 372);
+  g.bezierCurveTo(112, 438, 180, 458, 256, 458);
+  g.bezierCurveTo(332, 458, 400, 438, 414, 372);
+  g.bezierCurveTo(430, 300, 392, 215, 307, 168);
+  g.closePath();
+  g.fillStyle = gold(160, 460); g.fill();
+  g.lineWidth = 5; g.strokeStyle = '#6b4a12'; g.stroke();
+  // burlap texture
+  g.save(); g.clip(); g.globalAlpha = .08; g.strokeStyle = '#3a2806'; g.lineWidth = 1.5;
+  for (let y = 160; y < 470; y += 7) { g.beginPath(); g.moveTo(80, y); g.lineTo(440, y + 4); g.stroke(); }
+  for (let x = 80; x < 440; x += 9) { g.beginPath(); g.moveTo(x, 150); g.lineTo(x + 6, 470); g.stroke(); }
+  g.globalAlpha = .35; let hl = g.createRadialGradient(190, 270, 5, 190, 270, 140); hl.addColorStop(0, '#fff7d6'); hl.addColorStop(1, 'rgba(255,247,214,0)'); g.fillStyle = hl; g.fillRect(60, 150, 400, 320);
+  g.restore();
+  // top frill
+  g.beginPath();
+  g.moveTo(206, 170); g.bezierCurveTo(170, 140, 150, 100, 168, 72); g.bezierCurveTo(200, 92, 220, 80, 236, 64); g.bezierCurveTo(250, 84, 266, 84, 280, 62);
+  g.bezierCurveTo(296, 82, 318, 92, 346, 74); g.bezierCurveTo(360, 104, 342, 142, 306, 170); g.closePath();
+  g.fillStyle = gold(60, 170); g.fill(); g.lineWidth = 5; g.strokeStyle = '#6b4a12'; g.stroke();
+  // rope
+  g.lineCap = 'round';
+  g.strokeStyle = '#4a3410'; g.lineWidth = 16; g.beginPath(); g.moveTo(198, 168); g.quadraticCurveTo(256, 186, 314, 168); g.stroke();
+  g.strokeStyle = '#8a6a32'; g.lineWidth = 7; g.setLineDash([9, 7]); g.beginPath(); g.moveTo(198, 167); g.quadraticCurveTo(256, 184, 314, 167); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#4a3410'; g.lineWidth = 10; g.beginPath(); g.moveTo(214, 176); g.bezierCurveTo(190, 210, 176, 250, 182, 282); g.stroke();
+  g.fillStyle = '#4a3410'; g.beginPath(); g.ellipse(182, 290, 9, 15, 0, 0, Math.PI * 2); g.fill();
+  // RM
+  g.font = '700 118px Cinzel'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = 'rgba(255,240,190,.55)'; g.fillText('RM', 262, 348);
+  g.fillStyle = '#6b4a12'; g.fillText('RM', 258, 344);
+  // coins
+  const coin = (x, y, r) => { g.fillStyle = gold(y - r, y + r); g.beginPath(); g.ellipse(x, y, r, r * .42, 0, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#6b4a12'; g.lineWidth = 3; g.stroke(); };
+  coin(108, 446, 34); coin(404, 448, 30); coin(380, 432, 26);
+  return c;
+}
+(async () => {
+  const msg = document.getElementById('msg');
+  const big = await draw(512); document.getElementById('c').getContext('2d').drawImage(big, 0, 0);
+  for (const s of [512, 192, 180]) {
+    const c = await draw(s);
+    const r = await fetch('/__save-icon?size=' + s, { method: 'POST', body: c.toDataURL('image/png') });
+    msg.textContent += ' ' + s + ':' + r.status;
+  }
+  msg.textContent += ' done';
+})();
+</script></body></html>
