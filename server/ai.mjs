@@ -18,7 +18,7 @@ const SLANG = `Malaysian speech guide (English, Malay, Chinese, rojak mixed in o
 
 function prompts(task, b) {
   const catList = (l) => (l || []).map((c) => (Array.isArray(c) ? c[0] + ' (' + c[1] + ')' : c)).join(', ');
-  const cats = 'Expense categories, reply with the id before the brackets and pick the closest real match, use "other" only if nothing fits: ' + catList(b.cats && b.cats.expense) + '. Income categories: ' + catList(b.cats && b.cats.income) + '.';
+  const cats = 'Expense categories, reply with the id before the brackets and pick the closest real match, use "other" only if nothing fits: ' + catList(b.cats && b.cats.expense) + '. Examples: sports equipment, gym, badminton court → fitness; restaurant, cafe, mamak, food delivery → food; supermarket, pasar → groceries; petrol, Grab, toll, parking → transport; car service, road tax, car insurance → car; pharmacy, clinic, dental → health; clothes, electronics, online shopping → shopping; TNB, water, Indah Water → bills; phone, internet, Astro → phone; books, courses, tuition → education; salon, barber → care. Income categories: ' + catList(b.cats && b.cats.income) + '.';
   const rel = 'Malaysian personal income tax relief ids — set "relief" whenever the item is the kind the relief covers, else "": ' + (b.reliefs || []).map((r) => r.id + ' = ' + r.name).join('; ') +
     '. Examples: badminton racket, shoes for sport, gym fees, sports facility rental, marathon entry → sports; books, smartphone, laptop, tablet, internet bill, short courses → lifestyle; clinic for serious illness, vaccination, dental, health screening → medical; parents\' medical / care → parents; kindergarten / taska fees → childcare; SSPN deposit → sspn; EV charger → ev; university / professional course fees for self → edu.';
   const today = 'Today is ' + (b.today || new Date().toISOString().slice(0, 10)) + ' (Malaysia). Currency is RM unless stated.';
@@ -58,7 +58,26 @@ async function chat(env, task, b) {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) return { status: 502, body: { error: 'AI error: ' + ((j.error && j.error.message) || r.status) } };
   let out; try { out = JSON.parse(j.choices[0].message.content); } catch (e) { return { status: 502, body: { error: 'AI reply was not readable' } }; }
+  if (Array.isArray(out.entries)) out.entries.forEach((e) => fixCat(e, b));
   return { status: 200, body: out };
+}
+
+// The model sometimes answers with a relief id or a loose word as the category: map it to a real category id.
+const ALIAS = {
+  sports: 'fitness', sport: 'fitness', gym: 'fitness', medical: 'health', parents: 'parents', lifestyle: 'shopping', edu: 'education', childcare: 'kids',
+  petrol: 'transport', fuel: 'transport', grab: 'transport', toll: 'transport', parking: 'transport', restaurant: 'food', meal: 'food', drinks: 'food',
+  supermarket: 'groceries', grocery: 'groceries', utilities: 'bills', electricity: 'bills', internet: 'phone', mobile: 'phone', clothes: 'shopping',
+  electronics: 'shopping', pharmacy: 'health', clinic: 'health', dental: 'health', insurance: 'insurance', donation: 'gifts', gift: 'gifts', salon: 'care',
+  commission: 'commission', komisen: 'commission', gaji: 'salary', wages: 'salary', dividends: 'dividend', rent: 'rental',
+};
+function fixCat(e, b) {
+  if (e.type !== 'expense' && e.type !== 'income') return;
+  const ids = ((b.cats && b.cats[e.type]) || []).map((c) => (Array.isArray(c) ? c[0] : c));
+  if (!ids.length) return;
+  const c = String(e.cat || '').toLowerCase().trim();
+  if (ids.includes(c)) { e.cat = c; return; }
+  const a = ALIAS[c] || (ALIAS[String(e.relief || '').toLowerCase()] && e.type === 'expense' ? ALIAS[String(e.relief).toLowerCase()] : '');
+  e.cat = ids.includes(a) ? a : ids.includes('other') ? 'other' : ids[0];
 }
 
 async function transcribe(env, audio, type) {
