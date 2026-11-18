@@ -201,8 +201,10 @@
       if (!(value >= 0)) value = pos.cost; // no price yet: show at cost
       return { value: C.r2(value), cost: pos.cost, pl: C.r2(value - pos.cost), units: pos.units, realized: pos.realized, income: pos.income, live: px > 0 };
     }
-    const value = Number(h.value) || 0, cost = Number(h.cost) || 0;
-    return { value: C.r2(value), cost: C.r2(cost), pl: C.r2(cost ? value - cost : 0), units: 0, live: false };
+    const base = Number(h.value) || 0, cost = Number(h.cost) || 0, g = Number(h.growth) || 0;
+    const days = g && h.valueAt ? Math.max(0, C.daysBetween(h.valueAt, today)) : 0;
+    const value = g ? base * Math.pow(1 + g / 100, days / 365) : base;
+    return { value: C.r2(value), cost: C.r2(cost), pl: C.r2(cost ? value - cost : 0), units: 0, live: false, estimated: !!(g && days) };
   };
 
   // ---------- accounts / records ----------
@@ -507,7 +509,8 @@
     const fx = state.fx || {};
     const bal = C.accountBalances(state);
     let cash = 0, cardDebt = 0;
-    (state.accounts || []).forEach((a) => { if (a.archived) return; const b = bal[a.id] || 0; if (b >= 0) cash += b; else cardDebt += -b; });
+    const cashBy = { bank: 0, cash: 0, ewallet: 0, other: 0 };
+    (state.accounts || []).forEach((a) => { if (a.archived) return; const b = bal[a.id] || 0; if (b >= 0) { cash += b; const k = a.type in cashBy ? a.type : 'other'; cashBy[k] += b; } else cardDebt += -b; });
     let invest = 0, investCost = 0, property = 0, retire = 0;
     const byKind = {};
     (state.holdings || []).forEach((h) => {
@@ -531,11 +534,13 @@
     let insCash = 0; (state.policies || []).forEach((p) => { if (p.status !== 'lapsed' && p.status !== 'ended') insCash += Number(p.cashValue) || 0; });
     let loans = 0; (state.loans || []).forEach((l) => { if (!l.archived) loans += C.loanStatus(l, today).balance; });
     const assets = cash + invest + property + retire + owedToMe + splitIn + insCash;
+    // Liquidity: money usable now / investments you can sell within days / long-term or locked
+    const liquid = cash, sellable = invest, longTerm = property + retire + insCash + owedToMe + splitIn;
     const liabilities = loans + cardDebt + iOwe + splitOut;
     return {
       cash: C.r2(cash), cardDebt: C.r2(cardDebt), invest: C.r2(invest), investCost: C.r2(investCost), investPL: C.r2(invest - investCost),
       property: C.r2(property), retire: C.r2(retire), owedToMe: C.r2(owedToMe), iOwe: C.r2(iOwe), splitIn: C.r2(splitIn), splitOut: C.r2(splitOut),
-      insCash: C.r2(insCash), loans: C.r2(loans), assets: C.r2(assets), liabilities: C.r2(liabilities), netWorth: C.r2(assets - liabilities), byKind,
+      insCash: C.r2(insCash), loans: C.r2(loans), assets: C.r2(assets), cashBy: { bank: C.r2(cashBy.bank), cash: C.r2(cashBy.cash), ewallet: C.r2(cashBy.ewallet), other: C.r2(cashBy.other) }, liquid: C.r2(liquid), sellable: C.r2(sellable), longTerm: C.r2(longTerm), liabilities: C.r2(liabilities), netWorth: C.r2(assets - liabilities), byKind,
     };
   };
   // Monthly repayment plan: o.plan = { amount, start (first payment date), auto (reduce by itself), posted (last due date handled) }

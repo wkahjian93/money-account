@@ -77,17 +77,23 @@
   // ---------- views ----------
   const VIEWS = {};
 
+  // Bar: liquid / sellable / long-term share of total assets
+  function liqBar(s) {
+    const tot = s.liquid + s.sellable + s.longTerm; if (!(tot > 0)) return '';
+    const p = (v) => Math.round(v / tot * 1000) / 10;
+    return '<div class="liqbar"><i class="l1" style="width:' + p(s.liquid) + '%"></i><i class="l2" style="width:' + p(s.sellable) + '%"></i><i class="l3" style="width:' + p(s.longTerm) + '%"></i></div>' +
+      '<div class="liqkey small"><span><i class="l1"></i>Liquid ' + p(s.liquid) + '%</span><span><i class="l2"></i>Investments ' + p(s.sellable) + '%</span><span><i class="l3"></i>Long-term ' + p(s.longTerm) + '%</span></div>';
+  }
   VIEWS.home = () => {
     const s = C.summary(state), t = C.today(), ym = t.slice(0, 7);
     const ms = C.monthStats(state.txns, ym);
     const alerts = homeAlerts();
-    const rows = [
-      ['💵', 'Cash, bank & e-wallet', s.cash, 'wealth'],
-      ['📈', 'Investments', s.invest, 'wealth', s.investCost ? '<span class="' + plc(s.investPL) + '">' + rm(s.investPL) + ' (' + pct(s.investCost ? s.investPL / s.investCost : null) + ')</span>' : ''],
-      ['👴', 'EPF / retirement', s.retire, 'wealth'], ['🏠', 'Property', s.property, 'wealth'],
-      ['🛡️', 'Insurance cash / fund value', s.insCash, 'insurance'],
-      ['🤝', 'People owe me', s.owedToMe + s.splitIn, 'wealth'],
-    ].filter((x) => x[2]);
+    const LIQ = [
+      ['💧 Liquid — use it today', s.liquid, [['🏦', 'Cash in bank', s.cashBy.bank, 'wealth'], ['💵', 'Cash on hand', s.cashBy.cash, 'wealth'], ['📲', 'E-wallets', s.cashBy.ewallet, 'wealth'], ['📁', 'Other accounts', s.cashBy.other, 'wealth']]],
+      ['⏳ Investments — can sell in days', s.sellable, [['📈', 'Shares, unit trusts, gold, crypto, FD', s.invest, 'wealth', s.investCost ? '<span class="' + plc(s.investPL) + '">' + rm(s.investPL) + ' (' + pct(s.investCost ? s.investPL / s.investCost : null) + ')</span>' : '']]],
+      ['🏛️ Long-term — hard to turn into cash', s.longTerm, [['🏠', 'Property', s.property, 'wealth'], ['👴', 'EPF / retirement', s.retire, 'wealth'], ['🛡️', 'Insurance cash / fund value', s.insCash, 'insurance'], ['🤝', 'People owe me', s.owedToMe + s.splitIn, 'wealth']]],
+    ].map(([t, v, list]) => [t, v, list.filter((x) => x[2])]).filter((g) => g[1]);
+    const rows = LIQ.flatMap((g) => g[2]);
     const neg = [['🏦', 'Loans outstanding', s.loans, 'wealth'], ['💳', 'Credit card balance', s.cardDebt, 'wealth'], ['🙏', 'I owe others', s.iOwe + s.splitOut, 'wealth']].filter((x) => x[2]);
     const line = (x, sign) => `<a class="row" href="#/${x[3]}"><span class="ic">${x[0]}</span><span class="grow">${x[1]}${x[4] ? '<small>' + x[4] + '</small>' : ''}</span><b class="${sign < 0 ? 'down' : ''}">${sign < 0 ? '−' : ''}${rm(x[2])}</b></a>`;
     // emergency fund: months of spending covered by cash
@@ -106,7 +112,7 @@
         <div class="pricebar"><small>Prices ${ago(state.pricesAt)}</small><button class="chip" data-act="refreshPrices">↻ Update to today's prices</button></div>
       </section>
       ${alerts.length ? '<section class="card alerts">' + alerts.join('') + '</section>' : ''}
-      <section class="card"><h3>What I own</h3>${rows.map((x) => line(x, 1)).join('') || '<p class="muted">Add your bank accounts and investments in the Wealth tab.</p>'}
+      <section class="card"><h3>What I own</h3>${rows.length ? liqBar(s) + LIQ.map(([t, v, list]) => '<div class="liqhead"><span>' + t + '</span><b>' + rm(v) + '</b></div>' + list.map((x) => line(x, 1)).join('')).join('') : '<p class="muted">Add your bank accounts and investments in the Wealth tab.</p>'}
         ${neg.length ? '<h3 class="mt">What I owe</h3>' + neg.map((x) => line(x, -1)).join('') : ''}</section>
       <section class="card"><div class="h3row"><h3>${ymLabel(ym)}</h3><a href="#/records" class="link">All records →</a></div>
         <div class="stats3"><div><small>Income</small><b class="up">${rm(ms.income)}</b></div><div><small>Spent</small><b>${rm(ms.expense)}</b></div><div><small>Saved</small><b class="${plc(ms.saved)}">${rm(ms.saved)}</b><small>${ms.rate == null ? '' : fmtN(ms.rate * 100, 0) + '% of income'}</small></div></div>
@@ -180,7 +186,7 @@
       let sub = '';
       if (['stock', 'crypto', 'gold', 'fund'].includes(h.kind)) sub = fmtU(v.units) + (h.kind === 'gold' ? (h.unit === 'oz' ? ' oz' : ' g') : ' units') + (h.price ? ' @ ' + (h.priceCur || 'MYR') + ' ' + fmtN(h.price, h.price < 10 ? 4 : 2) : ' · no price yet');
       if (h.kind === 'fd') sub = fmtN(h.rate, 2) + '% p.a. · matures ' + dmy(h.maturity);
-      if (['epf', 'property', 'other'].includes(h.kind)) sub = 'Value as at ' + dmy(h.valueAt || '') ;
+      if (['epf', 'property', 'other'].includes(h.kind)) sub = h.growth ? 'Estimate: ' + rm(h.value) + ' on ' + dmy(h.valueAt || '') + ' ' + (h.growth > 0 ? '+' : '') + fmtN(h.growth, 1) + '%/yr' : 'Value as at ' + dmy(h.valueAt || '');
       const day = h.prevClose && h.price ? (h.price - h.prevClose) / h.prevClose : null;
       return `<button class="row" data-act="openHolding" data-id="${h.id}"><span class="grow">${esc(h.name)}${h.symbol ? ' <small class="tag">' + esc(h.symbol) + '</small>' : ''}<small>${esc(sub)}${day != null ? ' · today <span class="' + plc(day) + '">' + pct(day) + '</span>' : ''}</small></span><span class="right"><b>${rm(v.value)}</b><small class="${plc(v.pl)}">${v.cost ? rm(v.pl) + ' ' + pct(pl) : ''}</small></span></button>`;
     };
@@ -192,13 +198,14 @@
       <header class="top"><h1>Wealth</h1><button class="icon" data-act="toggleHide">${hidden() ? '🙈' : '👁️'}</button></header>
       <section class="hero slim"><div class="split2"><div><small>Total assets</small><b>${rm(s.assets)}</b></div><div><small>Net worth</small><b>${rm(s.netWorth)}</b></div></div>
         <div class="pricebar"><small>Prices ${ago(state.pricesAt)}</small><button class="chip" data-act="refreshPrices">↻ Update prices</button></div></section>
+      ${s.assets ? '<section class="card"><h3>Liquid vs long-term</h3>' + liqBar(s) + '<div class="stats3"><div><small>💧 Liquid</small><b>' + rm(s.liquid) + '</b><small>🏦 bank ' + rm(s.cashBy.bank) + '</small></div><div><small>⏳ Investments</small><b>' + rm(s.sellable) + '</b><small>sell in days</small></div><div><small>🏛️ Long-term</small><b>' + rm(s.longTerm) + '</b><small>property, EPF…</small></div></div></section>' : ''}
 
       <section class="card"><div class="h3row"><h3>📈 Investments</h3><div class="hbtns"><button class="chip" data-act="aiInvest">📷 Scan statement</button><button class="chip" data-act="addHolding">＋ Add</button></div></div>
         ${s.investCost ? `<div class="stats3"><div><small>Capital put in</small><b>${rm(s.investCost)}</b></div><div><small>Worth today</small><b>${rm(s.invest)}</b></div><div><small>Gain / loss</small><b class="${plc(s.investPL)}">${rm(s.investPL)}</b><small class="${plc(s.investPL)}">${pct(s.investPL / s.investCost)}</small></div></div>` : ''}
         ${groups.map(([k, ic, l, list]) => `<h4>${ic} ${esc(l)}</h4>` + list.map(hrow).join('')).join('') || '<p class="muted">Add shares, crypto, gold, unit trusts, FD, EPF or property. Shares, crypto and gold update to today’s price by themselves.</p>'}</section>
 
       <section class="card"><div class="h3row"><h3>🏦 Accounts</h3><button class="chip" data-act="addAccount">＋ Add</button></div>
-        ${state.accounts.filter((a) => !a.archived).map((a) => `<button class="row" data-act="editAccount" data-id="${a.id}"><span class="ic">${(ACC_TYPES.find((x) => x[0] === a.type) || ACC_TYPES[4])[1].split(' ')[0]}</span><span class="grow">${esc(a.name)}</span><b class="${bal[a.id] < 0 ? 'down' : ''}">${rm(bal[a.id] || 0)}</b></button>`).join('')}
+        ${ACC_TYPES.map(([k, l]) => { const list = state.accounts.filter((a) => !a.archived && (a.type === k || (k === 'other' && !ACC_TYPES.some((x) => x[0] === a.type)))); if (!list.length) return ''; const sub = list.reduce((t, a) => t + (bal[a.id] || 0), 0); return '<div class="liqhead"><span>' + (k === 'bank' ? '🏦 Cash in bank' : l) + '</span><b class="' + (sub < 0 ? 'down' : '') + '">' + rm(sub) + '</b></div>' + list.map((a) => `<button class="row" data-act="editAccount" data-id="${a.id}"><span class="ic">${(ACC_TYPES.find((x) => x[0] === a.type) || ACC_TYPES[4])[1].split(' ')[0]}</span><span class="grow">${esc(a.name)}</span><b class="${bal[a.id] < 0 ? 'down' : ''}">${rm(bal[a.id] || 0)}</b></button>`).join(''); }).join('')}
         <div class="btnrow"><button class="btn small" data-act="balanceCheck">⚖️ Balance check</button><button class="btn small" data-act="addTxn" data-type="transfer">🔁 Move money</button></div>
         <small class="muted">Forgot to record some spending? Balance check compares what your bank / e-wallet really shows with this app and records the gap.</small></section>
       ${(state.reports || []).length ? `<section class="card"><h3>📊 Investment reports</h3>${state.reports.slice().reverse().map((r) => `<button class="row" data-act="viewReport" data-id="${r.id}"><span class="grow">${esc(r.provider || 'Statement')}<small>${dmy(r.date)} · ${r.count} holdings</small></span><b>${rm(r.total || 0)}</b></button>`).join('')}</section>` : ''}
@@ -485,7 +492,10 @@
         ${fld('Price per unit (NAV, RM)', inp('price', h.price, 'inputmode="decimal" placeholder="e.g. 0.8512"'), 'Filled in by itself once the fund is found.')}</div>
       <div class="k-stock"><details><summary class="small muted">Type the price yourself</summary>${fld('Price', inp('mprice', '', 'inputmode="decimal" placeholder="leave blank to use live price"'))}${fld('Currency', '<select name="mcur">' + opt([['MYR', 'MYR'], ['USD', 'USD'], ['SGD', 'SGD'], ['HKD', 'HKD'], ['GBP', 'GBP'], ['EUR', 'EUR'], ['AUD', 'AUD'], ['JPY', 'JPY'], ['CNY', 'CNY']], h.priceCur || 'MYR') + '</select>')}</details></div>
       <div class="k-fd"><div class="grid2">${fld('Amount placed (RM)', money('principal', h.principal))}${fld('Interest % a year', inp('rate', h.rate, 'inputmode="decimal" placeholder="3.5"'))}${fld('Start date', inp('start', h.start || C.today(), 'type="date"'))}${fld('Maturity date', inp('maturity', h.maturity, 'type="date"'))}</div></div>
-      <div class="k-epf k-property k-other"><div class="grid2">${fld('Value today (RM)', money('value', h.value))}${fld('As at', inp('valueAt', h.valueAt || C.today(), 'type="date"'))}</div>${fld('Capital put in (RM)', money('cost', h.cost), 'Optional. For property: purchase price. For EPF leave blank.')}</div>
+      <div class="k-epf k-property k-other"><div class="grid2">${fld('Value (RM)', money('value', h.value))}${fld('As at', inp('valueAt', h.valueAt || C.today(), 'type="date"'))}</div></div>
+      <div class="k-property k-other">${fld('Expected change a year (%)', inp('growth', h.growth, 'inputmode="decimal" placeholder="e.g. 2 — blank = keep value as typed"'), 'The value then moves a little every day from the date above. It is an estimate, not a valuation.')}
+        <div class="k-property"><p class="small muted">No service gives a daily market price for one house. For a real figure: recent sales nearby on <a href="https://www.brickz.my" target="_blank" rel="noopener">Brickz</a> (from government transaction records), the state's House Price Index from <a href="https://napic.jpph.gov.my" target="_blank" rel="noopener">NAPIC</a> (every quarter — use its yearly % above), or a bank / valuer's valuation. Type the new value and date when you get one.</p></div></div>
+      <div class="k-epf k-property k-other">${fld('Capital put in (RM)', money('cost', h.cost), 'Optional. For property: purchase price. For EPF leave blank.')}</div>
       ${fld('Note', inp('note', h.note, 'placeholder="Optional, e.g. broker, platform"'))}`;
     const d = openSheet(isNew ? 'Add investment' : 'Edit ' + (h.name || ''), body, (v) => {
       const o = isNew ? { id: C.uid(), kind: v.kind, lots: [] } : h;
@@ -497,7 +507,7 @@
       if (v.kind === 'fund') { if (v.navName) { o.navName = v.navName; o.navMgr = v.navMgr; delete o.navOff; } o.price = num(v.price) || undefined; o.priceCur = 'MYR'; o.priceAt = new Date().toISOString(); o.priceSrc = 'typed by you'; }
       if (v.kind === 'stock' && num(v.mprice)) { o.price = num(v.mprice); o.priceCur = v.mcur; o.priceAt = new Date().toISOString(); o.priceSrc = 'typed by you'; }
       if (v.kind === 'fd') Object.assign(o, { principal: C.r2(num(v.principal)), rate: num(v.rate), start: v.start, maturity: v.maturity });
-      if (['epf', 'property', 'other'].includes(v.kind)) Object.assign(o, { value: C.r2(num(v.value)), valueAt: v.valueAt, cost: C.r2(num(v.cost)) });
+      if (['epf', 'property', 'other'].includes(v.kind)) Object.assign(o, { value: C.r2(num(v.value)), valueAt: v.valueAt, cost: C.r2(num(v.cost)), growth: v.kind !== 'epf' && v.growth !== '' && v.growth != null ? num(v.growth) : undefined });
       if (isNew && ['stock', 'crypto', 'gold', 'fund'].includes(v.kind)) {
         if (!(num(v.units) > 0)) { toast('Enter how many units'); return false; }
         o.lots.push({ id: C.uid(), type: 'buy', date: v.date || C.today(), units: num(v.units), amount: C.r2(num(v.capital)) });
@@ -518,7 +528,7 @@
         <div class="btnrow"><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="buy">＋ Buy more</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="sell">Sell</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="div">Dividend</button></div>
         <h4>History</h4>${lots.map((l) => `<div class="row"><span class="grow">${({ buy: 'Bought', sell: 'Sold', div: 'Dividend' })[l.type]} ${l.type !== 'div' ? fmtU(l.units) + ' units' : ''}<small>${dmy(l.date)}</small></span><b>${rm(l.amount)}</b><button type="button" class="icon small" data-act="delLot" data-id="${h.id}" data-lot="${l.id}">✕</button></div>`).join('')}` : ''}
       ${h.kind === 'fd' ? `<p class="small muted">${rm(h.principal)} at ${h.rate}% from ${dmy(h.start)} to ${dmy(h.maturity)}. Interest so far is counted day by day.${v.matured ? ' <b>Matured</b> — renew or move it, then update here.' : ''}</p>` : ''}
-      ${['epf', 'property', 'other'].includes(h.kind) ? `<p class="small muted">Value typed by you on ${dmy(h.valueAt)}. Update it when you get a new statement or valuation.</p>` : ''}
+      ${['epf', 'property', 'other'].includes(h.kind) ? `<p class="small muted">${h.growth ? 'Estimated from ' + rm(h.value) + ' on ' + dmy(h.valueAt) + ', moving ' + fmtN(h.growth, 1) + '% a year, day by day. Not a valuation.' : 'Value typed by you on ' + dmy(h.valueAt) + '.'} Update it when you get a new statement or valuation.</p>` : ''}
       <div class="btnrow"><button type="button" class="btn" data-act="editHolding" data-id="${h.id}">✎ Edit</button><button type="button" class="btn danger" data-act="delHolding" data-id="${h.id}">Delete</button></div>`);
   }
   function lotForm(h, type) {
@@ -1006,9 +1016,13 @@
     const hs = state.holdings.filter((h) => !h.archived);
     const loans = state.loans.filter((l) => !l.archived);
     return `<h3>Statement of assets & liabilities</h3><small class="muted">As at ${dmy(C.today())} · investments at market prices ${ago(state.pricesAt)}</small>
-      <h4>Assets</h4>${accs.filter((a) => (bal[a.id] || 0) >= 0).map((a) => line(a.name, bal[a.id] || 0)).join('')}
-      ${hs.map((h) => line(h.name + ' (' + kindOf(h.kind)[2] + ')', C.holdingValue(h, fx).value)).join('')}
+      <h4>Current (liquid) assets</h4>${accs.filter((a) => (bal[a.id] || 0) >= 0).map((a) => line(a.name + (a.type === 'bank' ? ' (cash in bank)' : ''), bal[a.id] || 0)).join('')}
+      ${line('Total liquid assets', s.liquid, 'sub')}
+      <h4>Investments (realisable within days)</h4>${hs.filter((h) => !['property', 'epf'].includes(h.kind)).map((h) => line(h.name + ' (' + kindOf(h.kind)[2] + ')', C.holdingValue(h, fx).value)).join('')}
+      ${line('Total investments', s.sellable, 'sub')}
+      <h4>Long-term assets</h4>${hs.filter((h) => ['property', 'epf'].includes(h.kind)).map((h) => { const v = C.holdingValue(h, fx); return line(h.name + ' (' + kindOf(h.kind)[2] + (v.estimated ? ', estimated' : '') + ')', v.value); }).join('')}
       ${s.insCash ? line('Insurance cash / fund value', s.insCash) : ''}${s.owedToMe + s.splitIn ? line('Amounts owed to me', s.owedToMe + s.splitIn) : ''}
+      ${line('Total long-term assets', s.longTerm, 'sub')}
       ${line('Total assets', s.assets, 'total')}
       <h4>Liabilities</h4>${loans.map((l) => line(l.name, C.loanStatus(l).balance)).join('')}
       ${accs.filter((a) => (bal[a.id] || 0) < 0).map((a) => line(a.name, -(bal[a.id] || 0))).join('')}

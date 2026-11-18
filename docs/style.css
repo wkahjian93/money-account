@@ -226,3 +226,10 @@ select option { background: #1a150d; }
 .codeask { position: fixed; inset: 0; z-index: 85; background: rgba(0,0,0,.7); display: grid; place-items: center; padding: 16px; }
 .codeask .card { width: 100%; max-width: 420px; background: #17120a; }
 .codeask input { width: 100%; font-size: 18px; padding: 12px; margin: 6px 0; letter-spacing: .5px; background: #0d0a05; color: #ffe7a3; border: 1px solid #d4a63a; border-radius: 10px; box-sizing: border-box; }
+
+.liqhead { display: flex; justify-content: space-between; margin: 12px 0 2px; font-size: 13px; color: var(--gold2); border-bottom: 1px solid var(--line); padding-bottom: 3px; }
+.liqbar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin: 6px 0; background: rgba(255,255,255,.06); }
+.liqbar i, .liqkey i { display: inline-block; }
+.liqkey { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; } .liqkey i { width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.l1 { background: #4fc3a1; } .l2 { background: #e8b84a; } .l3 { background: #8a7bd8; }
+.row.sub b { border-top: 1px solid var(--line); }

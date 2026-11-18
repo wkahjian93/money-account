@@ -142,5 +142,18 @@ eq('csv', C.csv([['a,b', 'x"y']]), '﻿"a,b","x""y"');
   eq('plan stops at zero', [C.owedLeft(o), o.repaid.length, o.repaid[o.repaid.length - 1].amount], [0, 6, 100]);
 }
 
+// liquidity groups + property estimate
+{
+  const st = { accounts: [{ id: 'b', type: 'bank', opening: 1000 }, { id: 'c', type: 'cash', opening: 50 }, { id: 'e', type: 'ewallet', opening: 20 }, { id: 'k', type: 'card', opening: -300 }], txns: [],
+    holdings: [{ id: 'p', kind: 'property', value: 500000, valueAt: '2025-01-01', growth: 3 }, { id: 'f', kind: 'fd', principal: 10000, rate: 0, start: '2026-01-01' }, { id: 'e2', kind: 'epf', value: 80000 }], owed: [{ amount: 200, repaid: [] }], loans: [], policies: [], split: { groups: [] } };
+  const s = C.summary(st, '2026-01-01');
+  eq('cash by type', s.cashBy, { bank: 1000, cash: 50, ewallet: 20, other: 0 });
+  eq('liquid', s.liquid, 1070);
+  eq('sellable', s.sellable, 10000);
+  eq('property +3% after 1 year', C.holdingValue(st.holdings[0], {}, '2026-01-01').value, 515000);
+  eq('long-term', s.longTerm, 515000 + 80000 + 200);
+  eq('groups add up', C.r2(s.liquid + s.sellable + s.longTerm), s.assets);
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
