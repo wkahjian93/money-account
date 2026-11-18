@@ -40,6 +40,7 @@
     ['fd', '🏦', 'Fixed deposit'], ['epf', '👴', 'EPF / KWSP / PRS'], ['property', '🏠', 'Property'], ['other', '💼', 'Other asset'],
   ];
   const kindOf = (k) => KINDS.find((x) => x[0] === k) || KINDS[7];
+  const invIcon = (t) => kindOf((state.holdings.find((h) => h.id === t.inv.holding) || {}).kind)[1];
   const LOAN_KINDS = [['housing', '🏠 Housing loan', 'reducing'], ['car', '🚗 Car loan (hire purchase)', 'flat'], ['personal', '💳 Personal loan', 'flat'], ['study', '🎓 Study loan (PTPTN)', 'reducing'], ['business', '💼 Business loan', 'reducing'], ['other', '📁 Other', 'reducing']];
   const POL_TYPES = [['life', 'Life / whole life'], ['ilp', 'Investment-linked (ILP)'], ['medical', 'Medical card'], ['ci', 'Critical illness'], ['pa', 'Personal accident'], ['term', 'Term'], ['endow', 'Savings / endowment'], ['other', 'Other']];
 
@@ -160,7 +161,7 @@
       <div class="filters">${[['all', 'All'], ['expense', 'Spent'], ['income', 'Income'], ['transfer', 'Transfers'], ['relief', '🧾 Tax receipts']].map(([k, l]) => `<button class="chip ${recFilter === k ? 'on' : ''}" data-act="recFilter" data-f="${k}">${l}</button>`).join('')}</div>
       <input class="search" placeholder="Search notes…" value="${esc(recSearch)}" data-input="recSearch">
       ${Object.keys(byDay).map((d) => `<div class="day"><small class="muted">${dmy(d)} · ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][C.parse(d).getDay()]}</small>
-        ${byDay[d].map((t) => { const c = t.type === 'transfer' ? ['', '🔁', 'Transfer'] : catOf(t.type, t.cat); return `<button class="row txn" data-act="editTxn" data-id="${t.id}"><span class="ic">${c[1]}</span><span class="grow">${esc(t.note || c[2])}<small>${esc(c[2])}${t.type === 'transfer' ? ' · ' + esc(accName(t.account)) + ' → ' + esc(accName(t.toAccount)) : t.account ? ' · ' + esc(accName(t.account)) : ''}${t.relief ? ' · 🧾 tax' : ''}${(t.receipts || []).length ? ' · 📎' : ''}${t.noCash ? ' · claim only' : ''}${t.recur ? ' · 🔁' : ''}${t.biz ? ' · 💼' : ''}</small></span><b class="${t.type === 'income' ? 'up' : ''}">${t.type === 'income' ? '+' : t.type === 'expense' ? '−' : ''}${rm(t.amount)}</b></button>`; }).join('')}</div>`).join('') || '<p class="muted center">Nothing here for this month.</p>'}`;
+        ${byDay[d].map((t) => { const c = t.inv ? ['', invIcon(t), t.inv.side === 'sell' ? 'Investment sold' : 'Investment'] : t.type === 'transfer' ? ['', '🔁', 'Transfer'] : catOf(t.type, t.cat); return `<button class="row txn" data-act="editTxn" data-id="${t.id}"><span class="ic">${c[1]}</span><span class="grow">${esc(t.note || c[2])}<small>${esc(c[2])}${t.inv ? ' · ' + esc(accName(t.account || t.toAccount)) : t.type === 'transfer' ? ' · ' + esc(accName(t.account)) + ' → ' + esc(accName(t.toAccount)) : t.account ? ' · ' + esc(accName(t.account)) : ''}${t.relief ? ' · 🧾 tax' : ''}${(t.receipts || []).length ? ' · 📎' : ''}${t.noCash ? ' · claim only' : ''}${t.recur ? ' · 🔁' : ''}${t.biz ? ' · 💼' : ''}</small></span><b class="${t.type === 'income' ? 'up' : ''}">${t.type === 'income' ? '+' : t.type === 'expense' ? '−' : ''}${rm(t.amount)}</b></button>`; }).join('')}</div>`).join('') || '<p class="muted center">Nothing here for this month.</p>'}`;
   };
 
   // ----- wealth -----
@@ -501,7 +502,7 @@
     const lots = (h.lots || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     openSheet(h.name, `
       <div class="stats3"><div><small>Capital</small><b>${rm(v.cost)}</b></div><div><small>Worth today</small><b>${rm(v.value)}</b></div><div><small>Gain / loss</small><b class="${plc(v.pl)}">${rm(v.pl)}</b><small class="${plc(v.pl)}">${v.cost ? pct(v.pl / v.cost) : ''}</small></div></div>
-      ${live ? `<p class="small muted">${fmtU(v.units)} units${h.price ? ' × ' + (h.priceCur || 'MYR') + ' ' + fmtN(h.price, 4) + (h.priceCur && h.priceCur !== 'MYR' ? ' (converted to RM at today’s rate)' : '') : ''}. Price from ${esc(h.priceSrc || '—')}, ${ago(h.priceAt)}.${v.realized ? ' Realised gain from sales: ' + rm(v.realized) + '.' : ''}${v.income ? ' Dividends received: ' + rm(v.income) + '.' : ''}</p>
+      ${live ? `<p class="small muted">${fmtU(v.units)} ${h.kind === 'gold' ? (h.unit === 'oz' ? 'oz' : 'g') : 'units'}${h.price ? ' × ' + (h.priceCur || 'MYR') + ' ' + fmtN(h.price, 4) + (h.priceCur && h.priceCur !== 'MYR' ? ' (converted to RM at today’s rate)' : '') : ''}. Price from ${esc(h.priceSrc || '—')}, ${ago(h.priceAt)}.${v.realized ? ' Realised gain from sales: ' + rm(v.realized) + '.' : ''}${v.income ? ' Dividends received: ' + rm(v.income) + '.' : ''}</p>
         <div class="btnrow"><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="buy">＋ Buy more</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="sell">Sell</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="div">Dividend</button></div>
         <h4>History</h4>${lots.map((l) => `<div class="row"><span class="grow">${({ buy: 'Bought', sell: 'Sold', div: 'Dividend' })[l.type]} ${l.type !== 'div' ? fmtU(l.units) + ' units' : ''}<small>${dmy(l.date)}</small></span><b>${rm(l.amount)}</b><button type="button" class="icon small" data-act="delLot" data-id="${h.id}" data-lot="${l.id}">✕</button></div>`).join('')}` : ''}
       ${h.kind === 'fd' ? `<p class="small muted">${rm(h.principal)} at ${h.rate}% from ${dmy(h.start)} to ${dmy(h.maturity)}. Interest so far is counted day by day.${v.matured ? ' <b>Matured</b> — renew or move it, then update here.' : ''}</p>` : ''}
@@ -719,7 +720,7 @@
       <button type="button" data-act="addHolding">📈<span>Investment</span></button><button type="button" data-act="addOwed" data-dir="in">🤝<span>Someone owes me</span></button>
       <button type="button" data-act="addLoan">🏦<span>Loan</span></button><button type="button" data-act="addPolicy">🛡️<span>Insurance</span></button></div>`),
     addTxn: (ds) => { const d = txnForm(); if (ds.type) { const r = d.querySelector('input[name=type][value=' + ds.type + ']'); r.checked = true; txnTypeUI(d, ds.type); } if (ds.relief) { d.querySelector('[name=relief]').value = ds.relief; const h = d.querySelector('input[name=catE][value=shopping]'); if (h) h.checked = true; } },
-    editTxn: (ds) => txnForm(state.txns.find((t) => t.id === ds.id)),
+    editTxn: (ds) => { const t = state.txns.find((x) => x.id === ds.id); const h = t && t.inv && state.holdings.find((x) => x.id === t.inv.holding); if (h && t.inv.lot && h.lots.some((l) => l.id === t.inv.lot)) holdingDetail(h); else txnForm(t); },
     delTxn: (ds) => { if (!confirmBox('Delete this record?')) return; const t = state.txns.find((x) => x.id === ds.id); (t.receipts || []).forEach((id) => S.delImg(id)); state.txns = state.txns.filter((x) => x.id !== ds.id); save(); closeSheet(); render(); },
     rmReceipt: (ds) => { draftReceipts = draftReceipts.filter((x) => x !== ds.id); drawThumbs(); },
     viewImg: async (ds) => { const src = await S.getImg(ds.id); const w = document.createElement('div'); w.className = 'viewer'; w.innerHTML = '<img src="' + src + '"><button class="icon">✕</button>'; w.onclick = () => w.remove(); document.body.appendChild(w); },
@@ -733,7 +734,7 @@
     editHolding: (ds) => holdingForm(state.holdings.find((h) => h.id === ds.id)),
     delHolding: (ds) => { if (!confirmBox('Delete this investment and its history?')) return; state.holdings = state.holdings.filter((h) => h.id !== ds.id); save(); closeSheet(); render(); },
     lot: (ds) => lotForm(state.holdings.find((h) => h.id === ds.id), ds.t),
-    delLot: (ds) => { const h = state.holdings.find((x) => x.id === ds.id); if (!confirmBox('Remove this entry?')) return; h.lots = h.lots.filter((l) => l.id !== ds.lot); save(); render(); holdingDetail(h); },
+    delLot: (ds) => { const h = state.holdings.find((x) => x.id === ds.id); const linked = state.txns.some((t) => t.inv && t.inv.lot === ds.lot); if (!confirmBox(linked ? 'Remove this entry and its money record? The account balance goes back.' : 'Remove this entry?')) return; h.lots = h.lots.filter((l) => l.id !== ds.lot); state.txns = state.txns.filter((t) => !(t.inv && t.inv.lot === ds.lot)); save(); render(); holdingDetail(h); },
     symSearch: () => symSearch(),
     pickSym: (ds) => { const f = $('.sheet'); if (ds.coin) { f.querySelector('[name=coinId]').value = ds.coin; } else { f.querySelector('[name=symbol]').value = ds.sym; } if (!f.querySelector('[name=name]').value) f.querySelector('[name=name]').value = ds.name; $('#symres').innerHTML = '<p class="small up">✓ ' + esc(ds.name) + ' (' + esc(ds.sym || ds.coin) + ')</p>'; },
     addLoan: () => loanForm(),
@@ -1013,7 +1014,7 @@
       const L = C.ledger(state, repAcc, repFrom, repTo);
       html = `<h1>${esc(reportTitle('ledger'))}</h1><p>${dmy(repFrom)} – ${dmy(repTo)} · Debit = money in, Credit = money out</p><table><tr><th>Date</th><th>Description</th><th>Category</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr>
         <tr><td></td><td><b>Opening balance</b></td><td></td><td></td><td></td><td class="n">${fmtN(L.opening)}</td></tr>
-        ${L.rows.map((x) => `<tr><td>${dmy(x.date)}</td><td>${esc(descOf(x.t))}</td><td>${x.t.type === 'transfer' ? 'Transfer' : esc(catName(x.t.type, x.t.cat))}</td><td class="n">${n2(x.debit)}</td><td class="n">${n2(x.credit)}</td><td class="n">${fmtN(x.balance)}</td></tr>`).join('')}
+        ${L.rows.map((x) => `<tr><td>${dmy(x.date)}</td><td>${esc(descOf(x.t))}</td><td>${x.t.inv ? 'Investment' : x.t.type === 'transfer' ? 'Transfer' : esc(catName(x.t.type, x.t.cat))}</td><td class="n">${n2(x.debit)}</td><td class="n">${n2(x.credit)}</td><td class="n">${fmtN(x.balance)}</td></tr>`).join('')}
         <tr><td></td><td><b>Totals / closing balance</b></td><td></td><td class="n"><b>${fmtN(L.debit)}</b></td><td class="n"><b>${fmtN(L.credit)}</b></td><td class="n"><b>${fmtN(L.closing)}</b></td></tr></table>`;
     } else if (r === 'pnl') {
       const P = C.pnl(state, repFrom, repTo);
@@ -1058,7 +1059,7 @@
     repPeriod: (ds) => { repFrom = ds.f; repTo = ds.t; render(); },
     repYear: (ds) => { const y = Number(repTo.slice(0, 4)) + Number(ds.d); repFrom = y + '-01-01'; repTo = y + '-12-31'; render(); },
     printReport: (ds) => printReport(ds.r),
-    exportLedger: () => { const L = C.ledger(state, repAcc, repFrom, repTo); csvFile('Statement-' + accName(repAcc).replace(/\W+/g, '_') + '-' + repFrom + '-to-' + repTo + '.csv', [['Account', accName(repAcc)], ['Period', repFrom + ' to ' + repTo], [], ['Date', 'Description', 'Category', 'Debit (in)', 'Credit (out)', 'Balance', 'Receipt'], ['', 'Opening balance', '', '', '', L.opening.toFixed(2)]].concat(L.rows.map((x) => [x.date, descOf(x.t), x.t.type === 'transfer' ? 'Transfer' : catName(x.t.type, x.t.cat), x.debit ? x.debit.toFixed(2) : '', x.credit ? x.credit.toFixed(2) : '', x.balance.toFixed(2), (x.t.receipts || []).length ? 'yes' : ''])).concat([['', 'Totals', '', L.debit.toFixed(2), L.credit.toFixed(2), L.closing.toFixed(2)]])); },
+    exportLedger: () => { const L = C.ledger(state, repAcc, repFrom, repTo); csvFile('Statement-' + accName(repAcc).replace(/\W+/g, '_') + '-' + repFrom + '-to-' + repTo + '.csv', [['Account', accName(repAcc)], ['Period', repFrom + ' to ' + repTo], [], ['Date', 'Description', 'Category', 'Debit (in)', 'Credit (out)', 'Balance', 'Receipt'], ['', 'Opening balance', '', '', '', L.opening.toFixed(2)]].concat(L.rows.map((x) => [x.date, descOf(x.t), x.t.inv ? 'Investment' : x.t.type === 'transfer' ? 'Transfer' : catName(x.t.type, x.t.cat), x.debit ? x.debit.toFixed(2) : '', x.credit ? x.credit.toFixed(2) : '', x.balance.toFixed(2), (x.t.receipts || []).length ? 'yes' : ''])).concat([['', 'Totals', '', L.debit.toFixed(2), L.credit.toFixed(2), L.closing.toFixed(2)]])); },
     exportPnl: () => { const P = C.pnl(state, repFrom, repTo); csvFile('Income-statement-' + repFrom + '-to-' + repTo + '.csv', [['Income statement', repFrom + ' to ' + repTo], [], ['INCOME', '']].concat(P.income.map(([k, v]) => [catName('income', k), v.toFixed(2)])).concat([['Total income', P.totalIncome.toFixed(2)], [], ['EXPENSES', '']]).concat(P.expense.map(([k, v]) => [catName('expense', k), v.toFixed(2)])).concat([['Total expenses', P.totalExpense.toFixed(2)], [], ['Surplus / (deficit)', P.net.toFixed(2)]])); },
     exportTax: () => {
       const y = Number(repTo.slice(0, 4)), nos = receiptNos(y);
@@ -1159,7 +1160,7 @@
     if (!srv) throw new Error('Set the server link in More → Settings to use AI');
     const reliefs = C.reliefList(state.settings).filter((r) => !r.kind).map((r) => ({ id: r.id, name: r.name }));
     const accounts = state.accounts.filter((a) => !a.archived).map((a) => ({ id: a.id, name: a.name, type: a.type }));
-    const r = await fetch(srv + '/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ task, code: (state.settings.aiCode || '').trim(), today: C.today(), cats: { expense: EXP_CATS.filter((c) => c[0] !== 'unknown').map((c) => [c[0], c[2]]), income: INC_CATS.map((c) => [c[0], c[2]]) }, reliefs, accounts }, payload)) });
+    const r = await fetch(srv + '/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ task, code: (state.settings.aiCode || '').trim(), today: C.today(), cats: { expense: EXP_CATS.filter((c) => c[0] !== 'unknown').map((c) => [c[0], c[2]]), income: INC_CATS.map((c) => [c[0], c[2]]) }, reliefs, accounts, holdings: state.holdings.filter((h) => !h.archived).map((h) => ({ id: h.id, name: h.name, kind: h.kind })) }, payload)) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { const e = new Error(j.error || 'Server error ' + r.status); e.status = r.status; throw e; }
     return j;
@@ -1255,7 +1256,21 @@
     const reliefs = [['', '— no tax relief —']].concat(C.reliefList(state.settings).filter((r) => !r.kind).map((r) => [r.id, r.name]));
     const valid = (type, cat) => (type === 'income' ? INC_CATS : EXP_CATS).some((c) => c[0] === cat) ? cat : 'other';
     const accOf = (id, fallback) => (accs.some((a) => a[0] === id) ? id : fallback);
-    const TYPES = { expense: '💸 Spending', income: '💰 Income', transfer: '🔁 Transfer', balance: '⚖️ Balance now' };
+    const TYPES = { expense: '💸 Spending', income: '💰 Income', transfer: '🔁 Transfer', balance: '⚖️ Balance now', invest: '📈 Investment' };
+    const IKINDS = [['gold', '🥇 Gold'], ['stock', '📈 Shares'], ['crypto', '🪙 Crypto'], ['fund', '📊 Unit trust / ILP'], ['fd', '🏦 Fixed deposit'], ['other', '💼 Other']];
+    const holds = [['', '＋ New investment']].concat(state.holdings.filter((h) => !h.archived).map((h) => [h.id, kindOf(h.kind)[1] + ' ' + h.name]));
+    const holdOf = (e) => { if (state.holdings.some((h) => h.id === e.holding)) return e.holding; const n = String(e.asset || '').toLowerCase(); const m = state.holdings.find((h) => !h.archived && h.kind === e.kind && (e.kind === 'gold' || (n && String(h.name).toLowerCase().includes(n)))); return m ? m.id : ''; };
+    const invCard = (e, i) => {
+      const kind = IKINDS.some((k) => k[0] === e.kind) ? e.kind : 'other', sell = e.side === 'sell';
+      return '<div class="grid2">' + fld('Buy or sell', '<select name="side_' + i + '">' + opt([['buy', 'Bought'], ['sell', 'Sold']], sell ? 'sell' : 'buy') + '</select>') + fld('What', '<select name="kind_' + i + '">' + opt(IKINDS, kind) + '</select>') + '</div>' +
+        '<div class="grid2">' + fld('Name', inp('asset_' + i, e.asset || (kind === 'gold' ? 'Gold' : ''))) + fld(kind === 'gold' ? (e.unit === 'oz' ? 'Troy ounces' : 'Grams') : 'Units', inp('units_' + i, e.units == null ? '' : e.units, 'inputmode="decimal"')) + '</div>' +
+        '<input type="hidden" name="unit_' + i + '" value="' + (e.unit === 'oz' ? 'oz' : 'g') + '">' +
+        '<div class="grid2">' + fld(sell ? 'Received (RM)' : 'Paid (RM)', money('amt_' + i, e.amount)) + fld('Date', inp('date_' + i, /^\d{4}-\d\d-\d\d$/.test(e.date || '') ? e.date : C.today(), 'type="date"')) + '</div>' +
+        '<div class="grid2">' + fld('Add to', '<select name="hold_' + i + '">' + opt(holds, holdOf(e)) + '</select>') + fld(sell ? 'Money into' : 'Paid from', '<select name="acc_' + i + '">' + opt(accs, accOf(e.account, (accs[0] || [])[0])) + '</select>') + '</div>' +
+        (kind === 'stock' || kind === 'crypto' ? fld(kind === 'stock' ? 'Ticker (for live price)' : 'Coin id (for live price)', inp('tick_' + i, kind === 'stock' ? (e.symbol || '') : (e.coinId || ''), 'autocapitalize="off"'), kind === 'stock' ? 'Bursa ends with .KL, e.g. Maybank 1155.KL' : 'e.g. bitcoin') : '') +
+        fld('Note', inp('note_' + i, e.note || '')) +
+        '<small class="muted">Not counted as spending: the money moves from your account into this investment.</small>';
+    };
     const sum = { expense: 0, income: 0 }; entries.forEach((e) => { if (sum[e.type] !== undefined) sum[e.type] += num(e.amount); });
     openSheet(o.title, `
       ${o.standIn ? '<p class="warn small">TEST MODE: this is a stand-in AI reply, not a real reading.</p>' : ''}
@@ -1264,23 +1279,55 @@
       ${o.receipts ? '<div class="thumbs" id="thumbs"></div>' : ''}
       ${entries.map((e, i) => { const type = TYPES[e.type] ? e.type : 'expense'; const cats = type === 'income' ? INC_CATS : EXP_CATS; return `<div class="card inset t-${type}">
         <label class="row"><input type="checkbox" name="on_${i}" checked><span class="grow"><b>${TYPES[type]}</b>${e.merchant ? ' · ' + esc(e.merchant) : ''}</span><input type="hidden" name="type_${i}" value="${type}"></label>
-        <div class="grid2">${fld(type === 'balance' ? 'Money in the account now (RM)' : 'Amount (RM)', money('amt_' + i, e.amount))}${fld('Date', inp('date_' + i, /^\d{4}-\d\d-\d\d$/.test(e.date || '') ? e.date : C.today(), 'type="date"'))}</div>
+        ${type === 'invest' ? invCard(e, i) + '</div>' : ''}${type === 'invest' ? '' : `<div class="grid2">${fld(type === 'balance' ? 'Money in the account now (RM)' : 'Amount (RM)', money('amt_' + i, e.amount))}${fld('Date', inp('date_' + i, /^\d{4}-\d\d-\d\d$/.test(e.date || '') ? e.date : C.today(), 'type="date"'))}</div>
         <div class="grid2">${type === 'expense' || type === 'income' ? fld('Category', '<select name="cat_' + i + '">' + opt(cats.map((c) => [c[0], c[1] + ' ' + c[2]]), valid(type, e.cat)) + '</select>') : ''}
           ${fld(type === 'transfer' ? 'From' : 'Account', '<select name="acc_' + i + '">' + opt(accs, accOf(e.account, (accs[0] || [])[0])) + '</select>')}
           ${type === 'transfer' ? fld('To', '<select name="to_' + i + '">' + opt(accs, accOf(e.toAccount, (accs[1] || accs[0] || [])[0])) + '</select>') : ''}</div>
         ${type === 'balance' ? '<small class="muted">The app compares this with its own figure and records any gap as unrecorded spending.</small>' : fld('Note', inp('note_' + i, e.note || e.merchant || ''))}
-        ${type === 'expense' ? fld('Tax relief', '<select name="rel_' + i + '">' + opt(reliefs, reliefs.some((r) => r[0] === e.relief) ? e.relief : '') + '</select>') + '<label class="row"><input type="checkbox" name="biz_' + i + '" ' + (e.biz ? 'checked' : '') + '><span class="grow small">💼 Business expense (agency)</span></label>' : ''}</div>`; }).join('') || '<p class="muted">No amounts found. Try again, or add it by hand.</p>'}`,
+        ${type === 'expense' ? fld('Tax relief', '<select name="rel_' + i + '">' + opt(reliefs, reliefs.some((r) => r[0] === e.relief) ? e.relief : '') + '</select>') + '<label class="row"><input type="checkbox" name="biz_' + i + '" ' + (e.biz ? 'checked' : '') + '><span class="grow small">💼 Business expense (agency)</span></label>' : ''}</div>`}`; }).join('') || '<p class="muted">No amounts found. Try again, or add it by hand.</p>'}`,
     (v) => {
-      let n = 0, gaps = 0;
+      let n = 0, gaps = 0; const newLive = [];
+      // check investments first so nothing is half-saved
+      for (let i = 0; i < entries.length; i++) {
+        if (v['type_' + i] !== 'invest' || !v['on_' + i] || !(num(v['amt_' + i]) > 0)) continue;
+        const h = state.holdings.find((x) => x.id === v['hold_' + i]), kind = h ? h.kind : v['kind_' + i];
+        if (['gold', 'stock', 'crypto', 'fund'].includes(kind) && !(num(v['units_' + i]) > 0)) { toast('Item ' + (i + 1) + ': type how many ' + (kind === 'gold' ? 'grams' : 'units')); return false; }
+        if (v['side_' + i] === 'sell' && !h) { toast('Item ' + (i + 1) + ': pick which investment you sold'); return false; }
+        if (v['side_' + i] === 'sell' && h && h.lots && h.lots.length && num(v['units_' + i]) > C.position(h).units + 1e-9) { toast('Item ' + (i + 1) + ': you only hold ' + fmtU(C.position(h).units) + ' of ' + h.name); return false; }
+      }
       const ok = (i) => v['on_' + i] && (num(v['amt_' + i]) > 0 || (v['type_' + i] === 'balance' && v['amt_' + i] !== ''));
       entries.forEach((e, i) => {
         const type = v['type_' + i];
         if (!ok(i) || type === 'balance') return;
+        if (type === 'invest') { saveInvest(i); n++; return; }
         const t = { id: C.uid(), at: new Date().toISOString(), type, amount: C.r2(num(v['amt_' + i])), date: v['date_' + i] || C.today(), account: v['acc_' + i], note: v['note_' + i], ai: true, receipts: n === 0 && o.receipts ? o.receipts : [] };
         if (type === 'transfer') { if (v['to_' + i] === t.account) return; t.toAccount = v['to_' + i]; t.cat = ''; }
         else { t.cat = v['cat_' + i]; if (type === 'expense' && v['rel_' + i]) t.relief = v['rel_' + i]; if (type === 'expense' && v['biz_' + i]) t.biz = true; }
         state.txns.push(t); n++;
       });
+      function saveInvest(i) {
+        const side = v['side_' + i] === 'sell' ? 'sell' : 'buy', amount = C.r2(num(v['amt_' + i])), units = num(v['units_' + i]), date = v['date_' + i] || C.today(), tick = (v['tick_' + i] || '').trim();
+        let h = state.holdings.find((x) => x.id === v['hold_' + i]);
+        if (!h) {
+          const kind = v['kind_' + i];
+          h = { id: C.uid(), kind, name: v['asset_' + i] || (kind === 'gold' ? 'Gold' : kindOf(kind)[2]), lots: [], note: 'Added from AI' };
+          if (kind === 'gold') h.unit = v['unit_' + i] || 'g';
+          if (kind === 'stock' && tick) h.symbol = tick.toUpperCase();
+          if (kind === 'crypto' && tick) h.coinId = tick.toLowerCase();
+          if (kind === 'fd') Object.assign(h, { principal: 0, rate: 0, start: date });
+          if (kind === 'other') Object.assign(h, { value: 0, valueAt: date, cost: 0 });
+          state.holdings.push(h);
+        }
+        const sg = side === 'sell' ? -1 : 1;
+        let lot;
+        if (['gold', 'stock', 'crypto', 'fund'].includes(h.kind)) { lot = C.uid(); (h.lots = h.lots || []).push({ id: lot, type: side, date, units, amount }); if (C.LIVE_KINDS.includes(h.kind)) newLive.push(h); }
+        else if (h.kind === 'fd') h.principal = C.r2(num(h.principal) + sg * amount);
+        else { h.value = C.r2(num(h.value) + sg * amount); h.cost = C.r2(num(h.cost) + sg * amount); h.valueAt = date; }
+        const u = units ? ' ' + fmtU(units) + (h.kind === 'gold' ? (h.unit === 'oz' ? ' oz' : ' g') : ' units') : '';
+        const t = { id: C.uid(), at: new Date().toISOString(), type: 'transfer', cat: '', amount, date, note: v['note_' + i] || (side === 'sell' ? 'Sold' : 'Bought') + u + ' ' + h.name, ai: true, receipts: n === 0 && o.receipts ? o.receipts : [], inv: { holding: h.id, lot, side } };
+        if (side === 'buy') t.account = v['acc_' + i]; else t.toAccount = v['acc_' + i];
+        state.txns.push(t);
+      }
       // balances last, after everything said in the same note is counted
       entries.forEach((e, i) => {
         if (!ok(i) || v['type_' + i] !== 'balance') return;
@@ -1290,7 +1337,7 @@
         gaps++;
       });
       if (!n && !gaps && !entries.some((e, i) => ok(i))) { toast('Nothing ticked with an amount'); return false; }
-      save(); render(); toast('Saved ' + n + ' record' + (n === 1 ? '' : 's') + (gaps ? ' + ' + gaps + ' balance gap' + (gaps > 1 ? 's' : '') : '') + ' ✓', 3500);
+      save(); render(); if (newLive.length) refreshPrices(true); toast('Saved ' + n + ' record' + (n === 1 ? '' : 's') + (gaps ? ' + ' + gaps + ' balance gap' + (gaps > 1 ? 's' : '') : '') + ' ✓', 3500);
     }, { saveText: 'Save all' });
     if (o.receipts) { draftReceipts = o.receipts.slice(); drawThumbs(); }
   }
