@@ -223,3 +223,6 @@ select option { background: #1a150d; }
 .welcome p { margin: 10px 0 18px; }
 .welcome .card { text-align: left; font-size: 14px; }
 .welcome label.btn { cursor: pointer; }
+.codeask { position: fixed; inset: 0; z-index: 85; background: rgba(0,0,0,.7); display: grid; place-items: center; padding: 16px; }
+.codeask .card { width: 100%; max-width: 420px; background: #17120a; }
+.codeask input { width: 100%; font-size: 18px; padding: 12px; margin: 6px 0; letter-spacing: .5px; background: #0d0a05; color: #ffe7a3; border: 1px solid #d4a63a; border-radius: 10px; box-sizing: border-box; }

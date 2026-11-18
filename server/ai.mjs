@@ -99,7 +99,8 @@ async function transcribe(env, audio, type) {
 
 function allowed(env, code) {
   if (!env.APP_CODE) return env.LOCAL === '1'; // live server: AI stays locked until an access code is set
-  return typeof code === 'string' && code.length && code === env.APP_CODE;
+  const want = String(env.APP_CODE).trim();
+  return typeof code === 'string' && code.trim().length > 0 && code.trim() === want;
 }
 
 // req-like: {path, headers: Map-like get(), json(), arrayBuffer()}
@@ -116,6 +117,7 @@ export async function handleAI(path, req, env) {
     const b = await req.json().catch(() => null);
     if (!b) return { status: 400, body: { error: 'bad request' } };
     if (!allowed(env, b.code)) return { status: 401, body: { error: 'Wrong AI access code (Settings)' } };
+    if (b.task === 'ping') return { status: 200, body: { ok: true } };
     return chat(env, b.task, b);
   }
   return { status: 404, body: { error: 'not found' } };

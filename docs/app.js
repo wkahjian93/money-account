@@ -328,7 +328,8 @@
     <section class="card"><h3>Live prices & AI</h3>
       <p class="small muted">Crypto, gold and exchange rates update by themselves. Bursa / US share prices and the AI (voice, receipt and statement reading) go through your own small server, because phones cannot call those services directly. The server keeps nothing: only ticker symbols, and the voice / photo you choose to send to AI, pass through it.</p>
       <label class="fld">Server link<input data-change="set" data-k="server" value="${esc(s.server)}" placeholder="blank = built-in server"></label>
-      <label class="fld">AI access code<input type="password" data-change="set" data-k="aiCode" value="${esc(s.aiCode)}" placeholder="the code set on your server" autocomplete="off"></label>
+      <label class="fld">AI access code<input type="password" id="aicodeIn" data-change="set" data-input="setLive" data-k="aiCode" value="${esc(s.aiCode)}" placeholder="the code set on your server" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <div class="btnrow"><button type="button" class="btn" data-act="codeShow">👁️ Show</button><button type="button" class="btn" data-act="codeTest">✅ Test code</button></div><div id="codeRes" class="small"></div>
       <small class="muted">Now using: ${esc(PR.server(s) || 'none — share prices must be typed by hand; voice uses the phone’s own speech typing')}</small></section>
     <section class="card"><h3>Sound</h3><label class="row"><input type="checkbox" data-change="setBool" data-k="sound" ${s.sound !== false ? 'checked' : ''}><span class="grow">💰 Money sound on buttons</span></label></section>
     <section class="card"><h3>💾 Backup</h3>
@@ -695,6 +696,17 @@
   // ---------- actions ----------
   const ACT = {
     closeSheet: () => closeSheet(),
+    codeShow: (el) => { const i = $('#aicodeIn'); if (!i) return; const show = i.type === 'password'; i.type = show ? 'text' : 'password'; el.textContent = show ? '🙈 Hide' : '👁️ Show'; },
+    codeTest: async () => {
+      const out = $('#codeRes'); const code = (state.settings.aiCode || '').trim();
+      if (!code) { out.innerHTML = '<span class="warn">No code typed yet.</span>'; return; }
+      out.textContent = '⏳ Checking with the server…';
+      try {
+        const r = await fetch(aiServer() + '/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: 'ping', code }) });
+        const j = await r.json().catch(() => ({}));
+        out.innerHTML = r.ok ? '<span class="up">✓ Code accepted — voice, receipt and statement AI will work.</span>' : '<span class="warn">✗ ' + esc(j.error || 'Server error ' + r.status) + ' (' + code.length + ' characters typed)</span>';
+      } catch (e) { out.innerHTML = '<span class="warn">✗ Could not reach the server: ' + esc(e.message) + '</span>'; }
+    },
     startFresh: () => { state = S.blank(); save(true); go('home'); render(); },
     startSample: () => { state = sampleData(); save(true); go('home'); render(); toast('Sample data loaded. Erase it in Settings when you are ready to start.', 4000); },
     toggleHide: () => { state.settings.hide = !state.settings.hide; save(); render(); },
@@ -800,7 +812,7 @@
     target: (el) => { state.settings.targets[el.dataset.k] = num(el.value); save(); },
   };
   document.addEventListener('change', (e) => { const f = CHANGE[e.target.dataset.change]; if (f) f(e.target); });
-  document.addEventListener('input', (e) => { if (e.target.dataset.input === 'recSearch') { recSearch = e.target.value; const pos = e.target.selectionStart; render(); const s = $('.search'); s.focus(); s.setSelectionRange(pos, pos); } });
+  document.addEventListener('input', (e) => { if (e.target.dataset.input === 'setLive') { state.settings[e.target.dataset.k] = e.target.value.trim(); save(); return; } if (e.target.dataset.input === 'recSearch') { recSearch = e.target.value; const pos = e.target.selectionStart; render(); const s = $('.search'); s.focus(); s.setSelectionRange(pos, pos); } });
   function taxSet(k, v) { const t = state.settings.tax; t[taxYear] = t[taxYear] || {}; if (v === undefined || v === false || v === 0) delete t[taxYear][k]; else t[taxYear][k] = v; save(); render(); }
 
   // ---------- helpers ----------
@@ -1115,14 +1127,47 @@
 
   // ---------- AI: voice, receipt, statement ----------
   const aiServer = () => PR.server(state.settings);
-  async function aiCall(task, payload) {
+  // Ask for the AI access code in a pop-up over the current screen (keeps the voice text / photos), resolve true if saved.
+  function askCode(why) {
+    return new Promise((done) => {
+      const d = document.createElement('div'); d.className = 'codeask';
+      d.innerHTML = '<div class="card"><h3>🔑 AI access code</h3><p class="small">' + esc(why) + '</p>' +
+        '<input id="caIn" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" value="' + esc(state.settings.aiCode || '') + '">' +
+        '<p class="small muted">Shown so you can check it. Capital letters and spaces count — type it exactly as you set it on the server.</p>' +
+        '<div class="btnrow"><button type="button" class="btn primary" id="caOk">Save & try again</button><button type="button" class="btn ghost" id="caNo">Cancel</button></div></div>';
+      document.body.appendChild(d);
+      const inp = d.querySelector('#caIn'); setTimeout(() => inp.focus(), 50);
+      const end = (ok) => { if (ok) { state.settings.aiCode = inp.value.trim(); save(); } d.remove(); done(ok && !!inp.value.trim()); };
+      d.querySelector('#caOk').onclick = () => end(true);
+      d.querySelector('#caNo').onclick = () => end(false);
+      inp.onkeydown = (e) => { if (e.key === 'Enter') end(true); };
+    });
+  }
+  const NO_CODE = 'This phone has no AI access code saved yet. Type the code you set on your server.';
+  const BAD_CODE = 'The server did not accept this code. Check it and try again.';
+  // Runs a server call; if the code is missing or rejected, asks for it and tries again.
+  async function withCode(run) {
+    if (!(state.settings.aiCode || '').trim() && (aiServer() || '') !== '/api') { if (!(await askCode(NO_CODE))) throw new Error('No AI access code'); }
+    for (;;) {
+      try { return await run(); }
+      catch (e) { if (e.status !== 401) throw e; if (!(await askCode(BAD_CODE))) throw new Error('Wrong AI access code'); }
+    }
+  }
+  const aiCall = (task, payload) => withCode(() => aiCall1(task, payload));
+  async function aiCall1(task, payload) {
     const srv = aiServer();
     if (!srv) throw new Error('Set the server link in More → Settings to use AI');
     const reliefs = C.reliefList(state.settings).filter((r) => !r.kind).map((r) => ({ id: r.id, name: r.name }));
     const accounts = state.accounts.filter((a) => !a.archived).map((a) => ({ id: a.id, name: a.name, type: a.type }));
-    const r = await fetch(srv + '/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ task, code: state.settings.aiCode || '', today: C.today(), cats: { expense: EXP_CATS.filter((c) => c[0] !== 'unknown').map((c) => [c[0], c[2]]), income: INC_CATS.map((c) => [c[0], c[2]]) }, reliefs, accounts }, payload)) });
+    const r = await fetch(srv + '/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ task, code: (state.settings.aiCode || '').trim(), today: C.today(), cats: { expense: EXP_CATS.filter((c) => c[0] !== 'unknown').map((c) => [c[0], c[2]]), income: INC_CATS.map((c) => [c[0], c[2]]) }, reliefs, accounts }, payload)) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || 'Server error ' + r.status);
+    if (!r.ok) { const e = new Error(j.error || 'Server error ' + r.status); e.status = r.status; throw e; }
+    return j;
+  }
+  async function transcribe(blob) {
+    const r = await fetch(aiServer() + '/transcribe', { method: 'POST', headers: { 'Content-Type': blob.type, 'X-Code': (state.settings.aiCode || '').trim() }, body: blob });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.error || 'Server error ' + r.status); e.status = r.status; throw e; }
     return j;
   }
   // Voice: record → server transcribe; without server, the phone's own speech typing.
@@ -1152,8 +1197,7 @@
           btn.classList.remove('on'); btn.innerHTML = '⏳<span>Listening back…</span>';
           try {
             const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
-            const r = await fetch(aiServer() + '/transcribe', { method: 'POST', headers: { 'Content-Type': blob.type, 'X-Code': state.settings.aiCode || '' }, body: blob });
-            const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+            const j = await withCode(() => transcribe(blob));
             $('#vtext').value = ($('#vtext').value ? $('#vtext').value + ' ' : '') + j.text;
             btn.innerHTML = '🎙️<span>Tap to add more</span>';
             voiceRead();
