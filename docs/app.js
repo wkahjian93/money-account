@@ -136,6 +136,12 @@
     state.policies.forEach((p) => { if (p.status === 'lapsed' || p.status === 'ended') return; const d = C.nextDue(p, t); if (d && d <= soon) out.push(`<a class="row" href="#/insurance"><span class="ic">🛡️</span><span class="grow">Premium due ${dmy(d)}<small>${esc(p.plan || p.insurer || 'Policy')} · ${esc(p.insured || 'Me')}</small></span><b>${rm(p.premium)}</b></a>`); });
     state.holdings.forEach((h) => { if (h.kind === 'fd' && h.maturity && h.maturity >= t && h.maturity <= soon) out.push(`<a class="row" href="#/wealth"><span class="ic">🏦</span><span class="grow">FD matures ${dmy(h.maturity)}<small>${esc(h.name)}</small></span><b>${rm(C.holdingValue(h, state.fx).value)}</b></a>`); });
     state.owed.forEach((o) => { if (o.dir !== 'out' && o.due && o.due < t && C.owedLeft(o) > 0) out.push(`<a class="row" href="#/wealth"><span class="ic">⏰</span><span class="grow">${esc(o.person)} was due to pay you ${dmy(o.due)}</span><b>${rm(C.owedLeft(o))}</b></a>`); });
+    state.owed.forEach((o) => {
+      if (!o.plan || o.plan.auto || C.owedLeft(o) <= 0) return;
+      const due = C.owedPlanDue(o, t)[0]; if (!due) return;
+      const amt = Math.min(num(o.plan.amount), C.owedLeft(o));
+      out.push(`<div class="row"><span class="ic">📅</span><span class="grow">${esc(o.person)} ${o.dir === 'out' ? 'you pay' : 'pays you'} monthly · due ${dmy(due)}<small>${rm(C.owedLeft(o))} still owing</small></span><b>${rm(amt)}</b><button type="button" class="btn small primary" data-act="owedGot" data-id="${o.id}">✓ ${o.dir === 'out' ? 'Paid' : 'Got it'}</button><button type="button" class="btn small ghost" data-act="owedMiss" data-id="${o.id}">Missed</button></div>`);
+    });
     const lb = state.settings.lastBackup;
     if (!lb || Date.now() - new Date(lb) > 14 * 864e5) out.push(`<a class="row" href="#/settings"><span class="ic">💾</span><span class="grow">Backup ${lb ? 'last made ' + ago(lb) : 'not made yet'}<small>Your records live only on this phone. Tap to back up.</small></span></a>`);
     return out;
@@ -211,9 +217,13 @@
         ${!owedOut.length && !splitRows.some((x) => x[1] < 0) ? '<p class="muted">You don’t owe anyone.</p>' : ''}
         ${settled.length ? '<details><summary class="muted small">Settled (' + settled.length + ')</summary>' + settled.map(owedRow).join('') + '</details>' : ''}</section>`;
   };
+  function owedPlanText(o) {
+    const pi = C.owedPlanInfo(o); if (!pi) return '';
+    return ' · 📅 ' + rm(o.plan.amount) + '/month' + (o.plan.auto ? '' : ' (confirm)') + ', next ' + dmy(pi.next) + ', done ~' + dmy(pi.finish);
+  }
   function owedRow(o) {
     const left = C.owedLeft(o);
-    return `<button class="row" data-act="editOwed" data-id="${o.id}"><span class="ic">${o.dir === 'out' ? '🙏' : '🤝'}</span><span class="grow">${esc(o.person)}<small>${esc(o.note || '')}${o.date ? ' · since ' + dmy(o.date) : ''}${o.due ? ' · due ' + dmy(o.due) : ''}</small></span><span class="right"><b class="${left ? (o.dir === 'out' ? 'down' : 'up') : 'muted'}">${left ? rm(left) : 'Settled'}</b>${left && left < num(o.amount) ? '<small>of ' + rm(o.amount) + '</small>' : ''}</span></button>`;
+    return `<button class="row" data-act="editOwed" data-id="${o.id}"><span class="ic">${o.dir === 'out' ? '🙏' : '🤝'}</span><span class="grow">${esc(o.person)}<small>${esc(o.note || '')}${o.date ? ' · since ' + dmy(o.date) : ''}${o.due ? ' · due ' + dmy(o.due) : ''}${owedPlanText(o)}</small></span><span class="right"><b class="${left ? (o.dir === 'out' ? 'down' : 'up') : 'muted'}">${left ? rm(left) : 'Settled'}</b>${left && left < num(o.amount) ? '<small>of ' + rm(o.amount) + '</small>' : ''}</span></button>`;
   }
 
   // ----- split -----
@@ -557,6 +567,11 @@
       <div class="grid2">${fld('Amount (RM)', money('amount', o.amount))}${fld('Date', inp('date', o.date, 'type="date"'))}</div>
       ${fld('Pay back by', inp('due', o.due, 'type="date"'), 'Optional — Home reminds you when it is late.')}
       ${fld('Note', inp('note', o.note, 'placeholder="What for?"'))}
+      <details class="card inset" ${o.plan ? 'open' : ''}><summary><b>📅 Pays back monthly</b> <small class="muted">optional</small></summary>
+        <div class="grid2">${fld('Each month (RM)', money('planAmt', o.plan ? o.plan.amount : ''))}${fld('First payment', inp('planStart', o.plan ? o.plan.start : C.addMonths(o.date || C.today(), 1), 'type="date"'))}</div>
+        <label class="row"><input type="checkbox" name="planAuto" ${!o.plan || o.plan.auto ? 'checked' : ''}><span class="grow small">Reduce by itself on each payment date<br><span class="muted">Untick to tap “✓ Got it” on Home each month instead.</span></span></label>
+        <p class="small" id="planPrev"></p>
+        ${o.plan ? '<label class="row"><input type="checkbox" name="planStop"><span class="grow small">Stop this plan</span></label>' : ''}</details>
       ${!isNew ? `<h4>Paid back so far</h4>${(o.repaid || []).map((r, i) => `<div class="row"><span class="grow">${dmy(r.date)}</span><b>${rm(r.amount)}</b><button type="button" class="icon small" data-act="delRepay" data-id="${o.id}" data-i="${i}">✕</button></div>`).join('') || '<p class="muted small">Nothing yet.</p>'}
         <p>Still owing: <b>${rm(left)}</b></p>
         <div class="grid2">${fld('Repayment (RM)', money('repay', ''))}${fld('Date', inp('repayDate', C.today(), 'type="date"'))}</div>
@@ -565,10 +580,26 @@
       if (!v.person || !(num(v.amount) > 0)) { toast('Enter a name and amount'); return false; }
       const x = isNew ? { id: C.uid(), repaid: [] } : o;
       Object.assign(x, { dir: v.dir, person: v.person, amount: C.r2(num(v.amount)), date: v.date, due: v.due || undefined, note: v.note });
+      if (v.planStop) delete x.plan;
+      else if (num(v.planAmt) > 0 && v.planStart) {
+        const old = x.plan || {};
+        x.plan = { amount: C.r2(num(v.planAmt)), start: v.planStart, auto: !!v.planAuto, posted: old.start === v.planStart ? old.posted : undefined };
+      }
       if (num(v.repay) > 0) x.repaid.push({ date: v.repayDate || C.today(), amount: C.r2(num(v.repay)) });
       if (isNew) state.owed.push(x);
+      const made = C.postOwedPlans(state);
       save(); render();
+      if (made.length) toast('📅 Counted ' + made.length + ' monthly repayment' + (made.length > 1 ? 's' : '') + ' already due', 3500);
     });
+    const sh = $$('.sheetwrap').pop();
+    const prev = () => {
+      const f = formVals(sh), amt = num(f.amount) - (o.repaid || []).reduce((a, r) => a + num(r.amount), 0), pm = num(f.planAmt), out = sh.querySelector('#planPrev');
+      if (!out) return;
+      if (!(pm > 0) || !(amt > 0) || !f.planStart) { out.textContent = ''; return; }
+      const n = Math.ceil(C.r2(amt / pm) - 1e-9);
+      out.innerHTML = 'Owing ' + rm(amt) + ' ÷ ' + rm(pm) + ' a month = <b>' + n + ' payment' + (n > 1 ? 's' : '') + '</b>, last one about <b>' + dmy(C.addMonths(f.planStart, n - 1)) + '</b>' + (n > 1 && C.r2(amt - (n - 1) * pm) !== pm ? ' (last payment ' + rm(C.r2(amt - (n - 1) * pm)) + ')' : '') + '.';
+    };
+    if (sh) { sh.addEventListener('input', prev); sh.addEventListener('change', prev); prev(); }
   }
 
   // ----- policy form -----
@@ -743,6 +774,8 @@
     addOwed: (ds) => owedForm(null, ds.dir),
     editOwed: (ds) => owedForm(state.owed.find((o) => o.id === ds.id)),
     delOwed: (ds) => { if (!confirmBox('Delete this record?')) return; state.owed = state.owed.filter((o) => o.id !== ds.id); save(); closeSheet(); render(); },
+    owedGot: (ds) => { const o = state.owed.find((x) => x.id === ds.id); const d = C.owedPlanDue(o)[0]; if (!d) return; const amount = C.r2(Math.min(num(o.plan.amount), C.owedLeft(o))); o.repaid.push({ date: d, amount, plan: true }); o.plan.posted = d; save(); render(); toast('✓ ' + rm(amount) + ' from ' + o.person + ' · ' + (C.owedLeft(o) > 0 ? rm(C.owedLeft(o)) + ' left' : 'all paid 🎉')); },
+    owedMiss: (ds) => { const o = state.owed.find((x) => x.id === ds.id); const d = C.owedPlanDue(o)[0]; if (!d) return; o.plan.posted = d; save(); render(); toast('Marked as missed — the plan runs one month longer'); },
     delRepay: (ds) => { const o = state.owed.find((x) => x.id === ds.id); o.repaid.splice(Number(ds.i), 1); save(); render(); owedForm(o); },
     addPolicy: () => policyForm(),
     editPolicy: (ds) => policyForm(state.policies.find((p) => p.id === ds.id)),
@@ -1500,6 +1533,7 @@
   }
 
   // ---------- start ----------
+  if (state) { const om = C.postOwedPlans(state); if (om.length) { save(true); setTimeout(() => toast('📅 Counted ' + om.length + ' monthly repayment' + (om.length > 1 ? 's' : '') + ' from people who owe you', 3500), 4200); } }
   if (state) { const made = C.postRecurring(state); if (made.length) { save(true); setTimeout(() => toast('🔁 Added ' + made.length + ' repeating record' + (made.length > 1 ? 's' : '') + ' due by today', 3500), 400); } }
   render();
   if (state && (!state.pricesAt || Date.now() - new Date(state.pricesAt) > 30 * 60000) && state.holdings.some((h) => C.LIVE_KINDS.includes(h.kind))) refreshPrices(true);

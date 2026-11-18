@@ -127,5 +127,20 @@ eq('spoken yesterday', sp[1].date, '2026-11-17');
 // csv quoting
 eq('csv', C.csv([['a,b', 'x"y']]), '﻿"a,b","x""y"');
 
+// owed monthly plan
+{
+  const o = { amount: 1000, repaid: [{ date: '2026-01-01', amount: 100 }], plan: { amount: 200, start: '2026-01-31', auto: true } };
+  eq('plan due dates', C.owedPlanDue(o, '2026-03-30'), ['2026-01-31', '2026-02-28']);
+  const st = { owed: [o] };
+  const made = C.postOwedPlans(st, '2026-04-30');
+  eq('plan posted 4', made.length, 4);
+  eq('plan left', C.owedLeft(o), 100);
+  eq('plan posted marker', o.plan.posted, '2026-04-30');
+  const pi = C.owedPlanInfo(o, '2026-04-30');
+  eq('plan info', [pi.next, pi.months, pi.finish, pi.last], ['2026-05-31', 1, '2026-05-31', 100]);
+  C.postOwedPlans(st, '2026-12-31');
+  eq('plan stops at zero', [C.owedLeft(o), o.repaid.length, o.repaid[o.repaid.length - 1].amount], [0, 6, 100]);
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

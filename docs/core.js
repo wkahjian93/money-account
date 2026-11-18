@@ -538,6 +538,34 @@
       insCash: C.r2(insCash), loans: C.r2(loans), assets: C.r2(assets), liabilities: C.r2(liabilities), netWorth: C.r2(assets - liabilities), byKind,
     };
   };
+  // Monthly repayment plan: o.plan = { amount, start (first payment date), auto (reduce by itself), posted (last due date handled) }
+  C.owedPlanDue = (o, today) => {
+    const p = o.plan, out = [];
+    if (!p || !(Number(p.amount) > 0) || !p.start) return out;
+    for (let i = 0; i < 600; i++) { const d = C.addMonths(p.start, i); if (d > (today || C.today())) break; if (p.posted && d <= p.posted) continue; out.push(d); }
+    return out;
+  };
+  C.owedPlanInfo = (o, today) => {
+    const p = o.plan, left = C.owedLeft(o);
+    if (!p || !(Number(p.amount) > 0) || !p.start || left <= 0) return null;
+    let next = p.start, i = 0;
+    while (p.posted && next <= p.posted && i < 600) next = C.addMonths(p.start, ++i);
+    const months = Math.ceil(C.r2(left / Number(p.amount)) - 1e-9);
+    return { next, months, finish: C.addMonths(next, months - 1), last: C.r2(left - (months - 1) * Number(p.amount)) };
+  };
+  // Auto plans: record each repayment due by today. Returns [{o, date, amount}].
+  C.postOwedPlans = (state, today) => {
+    const made = [];
+    (state.owed || []).forEach((o) => {
+      if (!o.plan || !o.plan.auto) return;
+      C.owedPlanDue(o, today).forEach((d) => {
+        const left = C.owedLeft(o); if (left <= 0) return;
+        const amount = C.r2(Math.min(Number(o.plan.amount), left));
+        (o.repaid = o.repaid || []).push({ date: d, amount, plan: true }); o.plan.posted = d; made.push({ o, date: d, amount });
+      });
+    });
+    return made;
+  };
   C.owedLeft = (o) => C.r2(Math.max(0, (Number(o.amount) || 0) - (o.repaid || []).reduce((a, r) => a + (Number(r.amount) || 0), 0)));
 
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
