@@ -17,8 +17,10 @@ const SLANG = `Malaysian speech guide (English, Malay, Chinese, rojak mixed in o
 - "semalam" / "昨天" = yesterday; "kelmarin" / "前天" = day before yesterday; "tadi" / "刚才" / "just now" = today; "minggu lepas" / "上个星期" = last week (pick that weekday if named, else 7 days ago).`;
 
 function prompts(task, b) {
-  const cats = 'Expense category ids: ' + (b.cats && b.cats.expense || []).join(', ') + '. Income category ids: ' + (b.cats && b.cats.income || []).join(', ') + '.';
-  const rel = 'Malaysian income tax relief ids (use only when the item clearly qualifies, else ""): ' + (b.reliefs || []).map((r) => r.id + ' = ' + r.name).join('; ') + '.';
+  const catList = (l) => (l || []).map((c) => (Array.isArray(c) ? c[0] + ' (' + c[1] + ')' : c)).join(', ');
+  const cats = 'Expense categories, reply with the id before the brackets and pick the closest real match, use "other" only if nothing fits: ' + catList(b.cats && b.cats.expense) + '. Income categories: ' + catList(b.cats && b.cats.income) + '.';
+  const rel = 'Malaysian personal income tax relief ids — set "relief" whenever the item is the kind the relief covers, else "": ' + (b.reliefs || []).map((r) => r.id + ' = ' + r.name).join('; ') +
+    '. Examples: badminton racket, shoes for sport, gym fees, sports facility rental, marathon entry → sports; books, smartphone, laptop, tablet, internet bill, short courses → lifestyle; clinic for serious illness, vaccination, dental, health screening → medical; parents\' medical / care → parents; kindergarten / taska fees → childcare; SSPN deposit → sspn; EV charger → ev; university / professional course fees for self → edu.';
   const today = 'Today is ' + (b.today || new Date().toISOString().slice(0, 10)) + ' (Malaysia). Currency is RM unless stated.';
   const accs = 'The user\'s accounts: ' + JSON.stringify(b.accounts || []) + '. ';
   if (task === 'entries') return {

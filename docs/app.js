@@ -1120,7 +1120,7 @@
     if (!srv) throw new Error('Set the server link in More → Settings to use AI');
     const reliefs = C.reliefList(state.settings).filter((r) => !r.kind).map((r) => ({ id: r.id, name: r.name }));
     const accounts = state.accounts.filter((a) => !a.archived).map((a) => ({ id: a.id, name: a.name, type: a.type }));
-    const r = await fetch(srv + '/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ task, code: state.settings.aiCode || '', today: C.today(), cats: { expense: EXP_CATS.map((c) => c[0]), income: INC_CATS.map((c) => c[0]) }, reliefs, accounts }, payload)) });
+    const r = await fetch(srv + '/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ task, code: state.settings.aiCode || '', today: C.today(), cats: { expense: EXP_CATS.filter((c) => c[0] !== 'unknown').map((c) => [c[0], c[2]]), income: INC_CATS.map((c) => [c[0], c[2]]) }, reliefs, accounts }, payload)) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'Server error ' + r.status);
     return j;
