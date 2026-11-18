@@ -69,8 +69,41 @@
         } catch (e) { errors.push('Stock prices: ' + e.message); }
       }
     }
+    const funds = hs.filter((h) => h.kind === 'fund' && !h.navOff);
+    if (funds.length && P.server(state.settings)) {
+      try {
+        const d = await P.navs(state.settings);
+        funds.forEach((h) => {
+          const f = P.matchFund(h, d.funds); if (!f) return;
+          if (!h.navName) { h.navName = f.name; h.navMgr = f.manager; }
+          if (!(f.nav > 0)) { errors.push(h.name + ': no price in today\'s report'); return; }
+          h.price = f.nav; h.priceCur = 'MYR'; h.priceAt = now; h.navDate = d.date; h.priceSrc = 'FIMM daily price (' + d.date + ')'; updated++;
+        });
+      } catch (e) { errors.push('Unit trust prices: ' + e.message); }
+    }
     state.pricesAt = now;
     return { updated, errors };
+  };
+
+  // Unit trust prices (all Malaysian fund houses incl. Public Mutual) from FIMM's daily report, via the price relay.
+  let navList = null;
+  P.navs = async (settings) => {
+    if (navList && Date.now() - navList.at < 3600e3) return navList.data;
+    const srv = P.server(settings); if (!srv) throw new Error('Server link not set (More → Settings)');
+    const d = await getJSON(srv + '/navs', 45000);
+    if (!d.funds) throw new Error(d.error || 'no fund prices');
+    navList = { at: Date.now(), data: d }; return d;
+  };
+  P.normFund = (n) => String(n || '').toUpperCase().replace(/\(.*?\)/g, ' ').replace(/\b(FUND|THE|DANA)\b/g, ' ').replace(/[^A-Z0-9]+/g, ' ').trim();
+  P.searchFund = async (q, settings) => {
+    const d = await P.navs(settings), words = P.normFund(q).split(' ').filter(Boolean);
+    return d.funds.filter((f) => { const n = ' ' + P.normFund(f.name + ' ' + f.manager) + ' '; return words.every((w) => n.includes(w)); }).slice(0, 15);
+  };
+  // Link a fund holding to a FIMM fund: its saved link, else an exact name match (unique).
+  P.matchFund = (h, funds) => {
+    if (h.navName) return funds.find((f) => f.name === h.navName && (!h.navMgr || f.manager === h.navMgr)) || funds.find((f) => f.name === h.navName);
+    const n = P.normFund(h.name), m = funds.filter((f) => P.normFund(f.name) === n);
+    return m.length === 1 ? m[0] : null;
   };
 
   P.searchStock = async (q, settings) => {

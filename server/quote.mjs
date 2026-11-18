@@ -29,6 +29,9 @@ async function search(q) {
   }));
 }
 
+import { getNavs } from './nav.mjs';
+let navCache = null; // { at, data } kept for an hour inside this server copy
+
 // path: '/quote' or '/search' (any prefix allowed, e.g. /api/quote)
 export async function handle(path, params) {
   try {
@@ -42,6 +45,10 @@ export async function handle(path, params) {
       const q = String(params.get('q') || '').trim().slice(0, 40);
       if (!q) return { status: 400, body: { error: 'q missing' } };
       return { status: 200, body: { results: await search(q) } };
+    }
+    if (/\/navs$/.test(path)) {
+      if (!navCache || Date.now() - navCache.at > 3600e3) navCache = { at: Date.now(), data: await getNavs() };
+      return { status: 200, body: navCache.data };
     }
     return { status: 404, body: { error: 'not found' } };
   } catch (e) {

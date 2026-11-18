@@ -480,7 +480,9 @@
       <div class="k-crypto">${fld('Coin id', inp('coinId', h.coinId, 'placeholder="bitcoin"'), 'Filled by Find.')}</div>
       <div class="k-gold">${fld('Unit', '<select name="unit">' + opt([['g', 'grams'], ['oz', 'troy ounces']], h.unit || 'g') + '</select>')}</div>
       ${isNew ? `<div class="k-stock k-crypto k-gold k-fund"><div class="grid2">${fld('Units / quantity', inp('units', lot0.units, 'inputmode="decimal" placeholder="e.g. 1000"'))}${fld('Capital put in (RM)', money('capital', lot0.amount), 'Total paid incl. fees')}</div>${fld('Date bought', inp('date', lot0.date || C.today(), 'type="date"'))}<small class="muted">Bought at different times? Add the first buy here, then “Buy more” later. Or put total units and total capital.</small></div>` : ''}
-      <div class="k-fund">${fld('Current price per unit (NAV, RM)', inp('price', h.price, 'inputmode="decimal" placeholder="e.g. 0.8512"'), 'Unit trust and ILP prices are not updated automatically — update from your statement or the fund house.')}</div>
+      <div class="k-fund">${fld('Find the fund (daily price)', '<div class="searchbox"><input id="fundq" placeholder="e.g. Public Ittikal, PB Growth" autocomplete="off"><button type="button" class="btn small" data-act="fundSearch">Find</button></div><div id="fundres">' + (h.navName ? '<p class="small up">✓ Daily price from ' + esc(h.navName) + ' · ' + esc(h.navMgr || '') + '</p>' : '') + '</div>', 'Unit trusts from Public Mutual and every other Malaysian fund house: the price updates by itself each business day (FIMM daily price report). ILP funds are not in it — type their price.')}
+        <input type="hidden" name="navName" value="${esc(h.navName || '')}"><input type="hidden" name="navMgr" value="${esc(h.navMgr || '')}">
+        ${fld('Price per unit (NAV, RM)', inp('price', h.price, 'inputmode="decimal" placeholder="e.g. 0.8512"'), 'Filled in by itself once the fund is found.')}</div>
       <div class="k-stock"><details><summary class="small muted">Type the price yourself</summary>${fld('Price', inp('mprice', '', 'inputmode="decimal" placeholder="leave blank to use live price"'))}${fld('Currency', '<select name="mcur">' + opt([['MYR', 'MYR'], ['USD', 'USD'], ['SGD', 'SGD'], ['HKD', 'HKD'], ['GBP', 'GBP'], ['EUR', 'EUR'], ['AUD', 'AUD'], ['JPY', 'JPY'], ['CNY', 'CNY']], h.priceCur || 'MYR') + '</select>')}</details></div>
       <div class="k-fd"><div class="grid2">${fld('Amount placed (RM)', money('principal', h.principal))}${fld('Interest % a year', inp('rate', h.rate, 'inputmode="decimal" placeholder="3.5"'))}${fld('Start date', inp('start', h.start || C.today(), 'type="date"'))}${fld('Maturity date', inp('maturity', h.maturity, 'type="date"'))}</div></div>
       <div class="k-epf k-property k-other"><div class="grid2">${fld('Value today (RM)', money('value', h.value))}${fld('As at', inp('valueAt', h.valueAt || C.today(), 'type="date"'))}</div>${fld('Capital put in (RM)', money('cost', h.cost), 'Optional. For property: purchase price. For EPF leave blank.')}</div>
@@ -492,7 +494,7 @@
       if (v.kind === 'stock') { o.symbol = (v.symbol || '').toUpperCase(); if (!o.symbol && !num(v.mprice)) { toast('Add a ticker symbol, or type a price'); return false; } }
       if (v.kind === 'crypto') { o.coinId = v.coinId; if (!o.coinId) { toast('Use Find to pick the coin'); return false; } }
       if (v.kind === 'gold') o.unit = v.unit;
-      if (v.kind === 'fund') { o.price = num(v.price) || undefined; o.priceCur = 'MYR'; o.priceAt = new Date().toISOString(); o.priceSrc = 'typed by you'; }
+      if (v.kind === 'fund') { if (v.navName) { o.navName = v.navName; o.navMgr = v.navMgr; delete o.navOff; } o.price = num(v.price) || undefined; o.priceCur = 'MYR'; o.priceAt = new Date().toISOString(); o.priceSrc = 'typed by you'; }
       if (v.kind === 'stock' && num(v.mprice)) { o.price = num(v.mprice); o.priceCur = v.mcur; o.priceAt = new Date().toISOString(); o.priceSrc = 'typed by you'; }
       if (v.kind === 'fd') Object.assign(o, { principal: C.r2(num(v.principal)), rate: num(v.rate), start: v.start, maturity: v.maturity });
       if (['epf', 'property', 'other'].includes(v.kind)) Object.assign(o, { value: C.r2(num(v.value)), valueAt: v.valueAt, cost: C.r2(num(v.cost)) });
@@ -502,7 +504,7 @@
       }
       if (isNew) state.holdings.push(o);
       save(); render();
-      if (isNew && C.LIVE_KINDS.includes(o.kind)) refreshPrices(true);
+      if ((isNew && C.LIVE_KINDS.includes(o.kind)) || (o.kind === 'fund' && o.navName)) refreshPrices(true);
     });
     d.querySelector('.sheet').dataset.kind = h.kind;
     return d;
@@ -767,6 +769,20 @@
     lot: (ds) => lotForm(state.holdings.find((h) => h.id === ds.id), ds.t),
     delLot: (ds) => { const h = state.holdings.find((x) => x.id === ds.id); const linked = state.txns.some((t) => t.inv && t.inv.lot === ds.lot); if (!confirmBox(linked ? 'Remove this entry and its money record? The account balance goes back.' : 'Remove this entry?')) return; h.lots = h.lots.filter((l) => l.id !== ds.lot); state.txns = state.txns.filter((t) => !(t.inv && t.inv.lot === ds.lot)); save(); render(); holdingDetail(h); },
     symSearch: () => symSearch(),
+    fundSearch: async () => {
+      const q = ($('#fundq') || {}).value, box = $('#fundres'); if (!q) return;
+      box.innerHTML = '<p class="small muted">Searching today’s fund prices…</p>';
+      try {
+        const r = await PR.searchFund(q, state.settings);
+        box.innerHTML = r.map((f) => `<button type="button" class="row" data-act="pickFund" data-n="${esc(f.name)}" data-m="${esc(f.manager)}" data-p="${f.nav == null ? '' : f.nav}"><span class="grow">${esc(f.name)}<small>${esc(f.manager)}</small></span><b>${f.nav == null ? 'no price' : fmtN(f.nav, 4)}</b></button>`).join('') || '<p class="small muted">Not found. Try fewer words, e.g. “Ittikal”.</p>';
+      } catch (e) { box.innerHTML = '<p class="small warn">' + esc(e.message) + '</p>'; }
+    },
+    pickFund: (ds) => {
+      const f = $('.sheet'), set = (n, val) => { const el = f.querySelector('[name=' + n + ']'); if (el) el.value = val; };
+      set('navName', ds.n); set('navMgr', ds.m); if (ds.p) set('price', ds.p);
+      const nm = f.querySelector('[name=name]'); if (nm && !nm.value) nm.value = ds.n.replace(/\b\w+/g, (w) => w[0] + w.slice(1).toLowerCase());
+      $('#fundres').innerHTML = '<p class="small up">✓ ' + esc(ds.n) + ' · ' + esc(ds.m) + (ds.p ? ' · NAV ' + fmtN(Number(ds.p), 4) : '') + '</p>';
+    },
     pickSym: (ds) => { const f = $('.sheet'); if (ds.coin) { f.querySelector('[name=coinId]').value = ds.coin; } else { f.querySelector('[name=symbol]').value = ds.sym; } if (!f.querySelector('[name=name]').value) f.querySelector('[name=name]').value = ds.name; $('#symres').innerHTML = '<p class="small up">✓ ' + esc(ds.name) + ' (' + esc(ds.sym || ds.coin) + ')</p>'; },
     addLoan: () => loanForm(),
     editLoan: (ds) => loanForm(state.loans.find((l) => l.id === ds.id)),
@@ -1353,7 +1369,7 @@
         }
         const sg = side === 'sell' ? -1 : 1;
         let lot;
-        if (['gold', 'stock', 'crypto', 'fund'].includes(h.kind)) { lot = C.uid(); (h.lots = h.lots || []).push({ id: lot, type: side, date, units, amount }); if (C.LIVE_KINDS.includes(h.kind)) newLive.push(h); }
+        if (['gold', 'stock', 'crypto', 'fund'].includes(h.kind)) { lot = C.uid(); (h.lots = h.lots || []).push({ id: lot, type: side, date, units, amount }); if (C.LIVE_KINDS.includes(h.kind) || h.kind === 'fund') newLive.push(h); }
         else if (h.kind === 'fd') h.principal = C.r2(num(h.principal) + sg * amount);
         else { h.value = C.r2(num(h.value) + sg * amount); h.cost = C.r2(num(h.cost) + sg * amount); h.valueAt = date; }
         const u = units ? ' ' + fmtU(units) + (h.kind === 'gold' ? (h.unit === 'oz' ? ' oz' : ' g') : ' units') : '';
@@ -1434,7 +1450,7 @@
         n++;
       });
       (state.reports = state.reports || []).push({ id: C.uid(), date, provider: r.provider || '', total: C.r2(total), cost: C.r2(cost), count: hs.length, summary: rep.summary || '', points: rep.points || [], check: rep.check || [] });
-      save(); go('wealth'); render(); toast('Updated ' + n + ' fund' + (n === 1 ? '' : 's') + ' and saved the report');
+      save(); go('wealth'); render(); toast('Updated ' + n + ' fund' + (n === 1 ? '' : 's') + ' and saved the report'); setTimeout(() => refreshPrices(true), 1500);
     }, { saveText: 'Save' });
   }
   function viewReport(id) {
@@ -1536,7 +1552,7 @@
   if (state) { const om = C.postOwedPlans(state); if (om.length) { save(true); setTimeout(() => toast('📅 Counted ' + om.length + ' monthly repayment' + (om.length > 1 ? 's' : '') + ' from people who owe you', 3500), 4200); } }
   if (state) { const made = C.postRecurring(state); if (made.length) { save(true); setTimeout(() => toast('🔁 Added ' + made.length + ' repeating record' + (made.length > 1 ? 's' : '') + ' due by today', 3500), 400); } }
   render();
-  if (state && (!state.pricesAt || Date.now() - new Date(state.pricesAt) > 30 * 60000) && state.holdings.some((h) => C.LIVE_KINDS.includes(h.kind))) refreshPrices(true);
+  if (state && (!state.pricesAt || Date.now() - new Date(state.pricesAt) > 30 * 60000) && state.holdings.some((h) => C.LIVE_KINDS.includes(h.kind) || h.kind === 'fund')) refreshPrices(true);
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
   // tidy receipt photos that no record uses any more
   if (state) setTimeout(async () => { try { const used = new Set(); state.txns.forEach((t) => (t.receipts || []).forEach((id) => used.add(id))); (await S.allImgKeys()).forEach((k) => { if (!used.has(k) && !(draftReceipts || []).includes(k)) S.delImg(k); }); } catch (e) {} }, 8000);
