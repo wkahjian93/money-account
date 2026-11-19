@@ -191,5 +191,17 @@ eq('csv', C.csv([['a,b', 'x"y']]), '﻿"a,b","x""y"');
   eq('after keys: unpaid owed to developer', [sm.devOwe, sm.netWorth], [520000, 130000]);
 }
 
+// shared ownership
+{
+  const st = { accounts: [], txns: [], owed: [], policies: [], split: { groups: [] },
+    holdings: [{ id: 'p', kind: 'property', value: 600000, cost: 500000, share: 50 }, { id: 'g', kind: 'gold', unit: 'g', price: 500, priceCur: 'MYR', lots: [{ type: 'buy', units: 10, amount: 4000, date: '2026-01-01' }], share: 30 }],
+    loans: [{ id: 'l', principal: 400000, rate: 0, tenureMonths: 400, start: '2026-11-01', method: 'reducing', share: 50 }] };
+  const s = C.summary(st, '2026-11-19');
+  eq('share: property half', s.property, 300000);
+  eq('share: gold 30%', [s.invest, s.investCost], [1500, 1200]);
+  eq('share: loan half', s.loans, C.r2(C.loanStatus(st.loans[0], '2026-11-19').balance / 2));
+  eq('share default 100', C.share({}), 1);
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

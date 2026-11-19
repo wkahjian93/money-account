@@ -505,6 +505,8 @@
   };
 
   // ---------- net worth ----------
+  // Ownership share (e.g. 50 = half with wife). Net worth counts my share only.
+  C.share = (x) => { const s = Number(x && x.share); return s > 0 && s < 100 ? s / 100 : 1; };
   C.summary = (state, today) => {
     today = today || C.today();
     const fx = state.fx || {};
@@ -516,7 +518,7 @@
     const byKind = {};
     (state.holdings || []).forEach((h) => {
       if (h.archived) return;
-      const v = C.holdingValue(h, fx, today);
+      const hv = C.holdingValue(h, fx, today), sh = C.share(h), v = { value: hv.value * sh, cost: hv.cost * sh };
       byKind[h.kind] = (byKind[h.kind] || 0) + v.value;
       if (h.kind === 'property') property += v.value;
       else if (h.kind === 'epf') retire += v.value;
@@ -533,9 +535,9 @@
       if (n > 0) splitIn += n / 100; else splitOut += -n / 100;
     });
     let insCash = 0; (state.policies || []).forEach((p) => { if (p.status !== 'lapsed' && p.status !== 'ended') insCash += Number(p.cashValue) || 0; });
-    let loans = 0; (state.loans || []).forEach((l) => { if (!l.archived) loans += C.loanStatus(l, today).balance; });
+    let loans = 0; (state.loans || []).forEach((l) => { if (!l.archived) loans += C.loanStatus(l, today).balance * C.share(l); });
     // after the keys the property counts at full price, so stages not yet paid are owed to the developer
-    let devOwe = 0; (state.holdings || []).forEach((h) => { if (!h.archived && h.offplan && h.offplan.done) devOwe += C.offplanStatus(h, today).toPay; });
+    let devOwe = 0; (state.holdings || []).forEach((h) => { if (!h.archived && h.offplan && h.offplan.done) devOwe += C.offplanStatus(h, today).toPay * C.share(h); });
     const assets = cash + invest + property + retire + owedToMe + splitIn + insCash;
     // Liquidity: money usable now / investments you can sell within days / long-term or locked
     const liquid = cash, sellable = invest, longTerm = property + retire + insCash + owedToMe + splitIn;

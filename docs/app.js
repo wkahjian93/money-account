@@ -40,6 +40,10 @@
     ['fd', '🏦', 'Fixed deposit'], ['epf', '👴', 'EPF / KWSP / PRS'], ['property', '🏠', 'Property'], ['other', '💼', 'Other asset'],
   ];
   const kindOf = (k) => KINDS.find((x) => x[0] === k) || KINDS[7];
+  // shared ownership fields + labels
+  const shareFields = (x) => '<div class="card inset"><b class="small">🤝 Owned with someone?</b><div class="btnrow"><button type="button" class="chip" data-act="setShare" data-v="100">All mine</button><button type="button" class="chip" data-act="setShare" data-v="50">Half with wife</button></div><div class="grid2">' + fld('My share (%)', inp('share', x.share || 100, 'inputmode="decimal"'), '100 = all mine, 50 = half each') + fld('Shared with', inp('coOwner', x.coOwner, 'placeholder="e.g. Wife"')) + '</div><small class="muted">Net worth counts only your share. Enter the full amounts above.</small></div>';
+  const readShare = (o, v) => { const s = num(v.share); if (s > 0 && s < 100) { o.share = C.r2(s); o.coOwner = v.coOwner || undefined; } else { delete o.share; delete o.coOwner; } };
+  const shareTag = (x) => (C.share(x) < 1 ? '🤝 ' + fmtN(x.share, x.share % 1 ? 1 : 0) + '% mine' + (x.coOwner ? ' (with ' + x.coOwner + ')' : '') : '');
   const invIcon = (t) => kindOf((state.holdings.find((h) => h.id === t.inv.holding) || {}).kind)[1];
   const LOAN_KINDS = [['housing', '🏠 Housing loan', 'reducing'], ['car', '🚗 Car loan (hire purchase)', 'flat'], ['personal', '💳 Personal loan', 'flat'], ['study', '🎓 Study loan (PTPTN)', 'reducing'], ['business', '💼 Business loan', 'reducing'], ['other', '📁 Other', 'reducing']];
   const POL_TYPES = [['life', 'Life / whole life'], ['ilp', 'Investment-linked (ILP)'], ['medical', 'Medical card'], ['ci', 'Critical illness'], ['pa', 'Personal accident'], ['term', 'Term'], ['endow', 'Savings / endowment'], ['other', 'Other']];
@@ -102,7 +106,7 @@
     const em = avgSpend > 0 ? s.cash / avgSpend : null;
     const budgets = state.settings.budgets || {};
     const cats = Object.keys(Object.assign({}, ms.byCat, budgets)).map((k) => [k, ms.byCat[k] || 0, num(budgets[k])]).sort((a, b) => b[1] - a[1]).slice(0, 6);
-    const loanMonthly = state.loans.filter((l) => !l.archived).reduce((a, l) => { const st = C.loanStatus(l); return a + (st.done ? 0 : st.monthly); }, 0);
+    const loanMonthly = state.loans.filter((l) => !l.archived).reduce((a, l) => { const st = C.loanStatus(l); return a + (st.done ? 0 : st.monthly * C.share(l)); }, 0);
     return `
       <header class="top"><div><small class="muted">${esc(state.settings.name ? 'Hi ' + state.settings.name : 'Money Account')}</small><h1>Net worth</h1></div>
         <button class="icon" data-act="toggleHide" title="Hide amounts">${hidden() ? '🙈' : '👁️'}</button></header>
@@ -183,11 +187,12 @@
     const hs = state.holdings.filter((h) => !h.archived);
     const groups = KINDS.map(([k, ic, l]) => [k, ic, l, hs.filter((h) => h.kind === k)]).filter((g) => g[3].length);
     const hrow = (h) => {
-      const v = C.holdingValue(h, fx), pl = v.cost ? v.pl / v.cost : null;
+      const full = C.holdingValue(h, fx), sh = C.share(h), v = Object.assign({}, full, { value: full.value * sh, cost: full.cost * sh, pl: full.pl * sh }), pl = v.cost ? v.pl / v.cost : null;
       let sub = '';
       if (['stock', 'crypto', 'gold', 'fund'].includes(h.kind)) sub = fmtU(v.units) + (h.kind === 'gold' ? (h.unit === 'oz' ? ' oz' : ' g') : ' units') + (h.price ? ' @ ' + (h.priceCur || 'MYR') + ' ' + fmtN(h.price, h.price < 10 ? 4 : 2) : ' · no price yet');
       if (h.kind === 'fd') sub = fmtN(h.rate, 2) + '% p.a. · matures ' + dmy(h.maturity);
       if (['epf', 'property', 'other'].includes(h.kind)) sub = h.growth ? 'Estimate: ' + rm(h.value) + ' on ' + dmy(h.valueAt || '') + ' ' + (h.growth > 0 ? '+' : '') + fmtN(h.growth, 1) + '%/yr' : 'Value as at ' + dmy(h.valueAt || '');
+      if (sh < 1) sub += ' · ' + shareTag(h) + ' of ' + rm(full.value, { d: 0 });
       const day = h.prevClose && h.price ? (h.price - h.prevClose) / h.prevClose : null;
       return `<button class="row" data-act="openHolding" data-id="${h.id}"><span class="grow">${esc(h.name)}${h.symbol ? ' <small class="tag">' + esc(h.symbol) + '</small>' : ''}<small>${esc(sub)}${day != null ? ' · today <span class="' + plc(day) + '">' + pct(day) + '</span>' : ''}</small></span><span class="right"><b>${rm(v.value)}</b><small class="${plc(v.pl)}">${v.cost ? rm(v.pl) + ' ' + pct(pl) : ''}</small></span></button>`;
     };
@@ -212,8 +217,8 @@
       ${(state.reports || []).length ? `<section class="card"><h3>📊 Investment reports</h3>${state.reports.slice().reverse().map((r) => `<button class="row" data-act="viewReport" data-id="${r.id}"><span class="grow">${esc(r.provider || 'Statement')}<small>${dmy(r.date)} · ${r.count} holdings</small></span><b>${rm(r.total || 0)}</b></button>`).join('')}</section>` : ''}
 
       <section class="card"><div class="h3row"><h3>🏦 Loans</h3><button class="chip" data-act="addLoan">＋ Add</button></div>
-        ${loans.map((l) => { const st = C.loanStatus(l); return `<button class="row" data-act="editLoan" data-id="${l.id}"><span class="grow">${esc(l.name)}<small>${rm(st.monthly)}/month · ${st.leftMonths} months left${st.fromStatement ? ' · from statement' : ''}</small><span class="track thin"><i style="width:${(st.progress * 100).toFixed(1)}%"></i></span></span><span class="right"><b class="down">${rm(st.balance)}</b><small>balance</small></span></button>`; }).join('') || '<p class="muted">No loans recorded.</p>'}
-        ${loans.length ? `<div class="row total"><span class="grow">Total monthly repayments</span><b>${rm(loans.reduce((a, l) => { const st = C.loanStatus(l); return a + (st.done ? 0 : st.monthly); }, 0))}</b></div>` : ''}</section>
+        ${loans.map((l) => { const st = C.loanStatus(l); return `<button class="row" data-act="editLoan" data-id="${l.id}"><span class="grow">${esc(l.name)}<small>${rm(st.monthly)}/month · ${st.leftMonths} months left${st.fromStatement ? ' · from statement' : ''}${C.share(l) < 1 ? ' · ' + shareTag(l) + ': ' + rm(st.balance * C.share(l), { d: 0 }) + ' is yours' : ''}</small><span class="track thin"><i style="width:${(st.progress * 100).toFixed(1)}%"></i></span></span><span class="right"><b class="down">${rm(st.balance)}</b><small>balance</small></span></button>`; }).join('') || '<p class="muted">No loans recorded.</p>'}
+        ${loans.length ? `<div class="row total"><span class="grow">Total monthly repayments${loans.some((l) => C.share(l) < 1) ? '<small>my share</small>' : ''}</span><b>${rm(loans.reduce((a, l) => { const st = C.loanStatus(l); return a + (st.done ? 0 : st.monthly * C.share(l)); }, 0))}</b></div>` : ''}</section>
 
       <section class="card"><div class="h3row"><h3>🤝 Money people owe me</h3><button class="chip" data-act="addOwed" data-dir="in">＋ Add</button></div>
         ${owedIn.map(owedRow).join('')}
@@ -501,11 +506,12 @@
       <div class="k-property k-other">${fld('Expected change a year (%)', inp('growth', h.growth, 'inputmode="decimal" placeholder="e.g. 2 — blank = keep value as typed"'), 'The value then moves a little every day from the date above. It is an estimate, not a valuation.')}
         <div class="k-property"><p class="small muted">No service gives a daily market price for one house. For a real figure: recent sales nearby on <a href="https://www.brickz.my" target="_blank" rel="noopener">Brickz</a> (from government transaction records), the state's House Price Index from <a href="https://napic.jpph.gov.my" target="_blank" rel="noopener">NAPIC</a> (every quarter — use its yearly % above), or a bank / valuer's valuation. Type the new value and date when you get one.</p></div></div>
       <div class="k-epf k-property k-other">${fld('Capital put in (RM)', money('cost', h.cost), 'Optional. For property: purchase price. For EPF leave blank.')}</div>
+      ${shareFields(h)}
       ${fld('Note', inp('note', h.note, 'placeholder="Optional, e.g. broker, platform"'))}`;
     const d = openSheet(isNew ? 'Add investment' : 'Edit ' + (h.name || ''), body, (v) => {
       const o = isNew ? { id: C.uid(), kind: v.kind, lots: [] } : h;
       o.name = v.name || (v.kind === 'stock' ? v.symbol : v.kind === 'crypto' ? v.coinId : v.kind === 'gold' ? 'Gold' : '') || kindOf(v.kind)[2];
-      o.note = v.note;
+      o.note = v.note; readShare(o, v);
       if (v.kind === 'stock') { o.symbol = (v.symbol || '').toUpperCase(); if (!o.symbol && !num(v.mprice)) { toast('Add a ticker symbol, or type a price'); return false; } }
       if (v.kind === 'crypto') { o.coinId = v.coinId; if (!o.coinId) { toast('Use Find to pick the coin'); return false; } }
       if (v.kind === 'gold') o.unit = v.unit;
@@ -536,6 +542,7 @@
     const v = C.holdingValue(h, state.fx), live = ['stock', 'crypto', 'gold', 'fund'].includes(h.kind);
     const lots = (h.lots || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     openSheet(h.name, `
+      ${C.share(h) < 1 ? '<p class="small">' + shareTag(h) + ': your share is worth <b>' + rm(v.value * C.share(h)) + '</b> (capital ' + rm(v.cost * C.share(h)) + '). Figures below are for the whole.</p>' : ''}
       <div class="stats3"><div><small>Capital</small><b>${rm(v.cost)}</b></div><div><small>Worth today</small><b>${rm(v.value)}</b></div><div><small>Gain / loss</small><b class="${plc(v.pl)}">${rm(v.pl)}</b><small class="${plc(v.pl)}">${v.cost ? pct(v.pl / v.cost) : ''}</small></div></div>
       ${live ? `<p class="small muted">${fmtU(v.units)} ${h.kind === 'gold' ? (h.unit === 'oz' ? 'oz' : 'g') : 'units'}${h.price ? ' × ' + (h.priceCur || 'MYR') + ' ' + fmtN(h.price, 4) + (h.priceCur && h.priceCur !== 'MYR' ? ' (converted to RM at today’s rate)' : '') : ''}. Price from ${esc(h.priceSrc || '—')}, ${ago(h.priceAt)}.${v.realized ? ' Realised gain from sales: ' + rm(v.realized) + '.' : ''}${v.income ? ' Dividends received: ' + rm(v.income) + '.' : ''}</p>
         <div class="btnrow"><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="buy">＋ Buy more</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="sell">Sell</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="div">Dividend</button></div>
@@ -676,6 +683,7 @@
       <div class="grid2">${fld('Amount borrowed (RM)', money('principal', l.principal))}${fld('Interest % a year', inp('rate', l.rate, 'inputmode="decimal" placeholder="e.g. 4.2"'))}
       ${fld('Tenure (years)', inp('years', l.tenureMonths ? C.r2(l.tenureMonths / 12) : '', 'inputmode="decimal" placeholder="e.g. 35"'))}${fld('First month', inp('start', l.start, 'type="date"'))}</div>
       ${fld('Actual monthly instalment (RM)', money('monthly', l.monthly), 'Optional. Put the bank’s figure if it differs from the calculation.')}
+      ${shareFields(l)}
       <details ${l.balanceOverride !== undefined && l.balanceOverride !== '' ? 'open' : ''}><summary class="small muted">Use the balance from my bank statement instead</summary>
       <div class="grid2">${fld('Balance on statement (RM)', money('balanceOverride', l.balanceOverride))}${fld('Statement date', inp('balanceAt', l.balanceAt || C.today(), 'type="date"'))}</div></details>
       ${!isNew ? '<label class="row"><input type="checkbox" name="archived" ' + (l.archived ? 'checked' : '') + '><span class="grow small">Fully paid / hide</span></label><button type="button" class="btn danger" data-act="delLoan" data-id="' + l.id + '">Delete loan</button>' : ''}`,
@@ -683,6 +691,7 @@
       if (!(num(v.principal) > 0) || !(num(v.years) > 0)) { toast('Enter amount and tenure'); return false; }
       const o = isNew ? { id: C.uid() } : l;
       Object.assign(o, { name: v.name || (LOAN_KINDS.find((x) => x[0] === v.kind) || [])[1], kind: v.kind, method: v.method, principal: C.r2(num(v.principal)), rate: num(v.rate), tenureMonths: Math.round(num(v.years) * 12), start: v.start, monthly: num(v.monthly) || undefined, balanceOverride: v.balanceOverride === '' ? undefined : C.r2(num(v.balanceOverride)), balanceAt: v.balanceOverride === '' ? undefined : v.balanceAt, archived: !!v.archived || undefined });
+      readShare(o, v);
       if (isNew) state.loans.push(o);
       save(); render();
     });
@@ -898,6 +907,7 @@
     lot: (ds) => lotForm(state.holdings.find((h) => h.id === ds.id), ds.t),
     delLot: (ds) => { const h = state.holdings.find((x) => x.id === ds.id); const linked = state.txns.some((t) => t.inv && t.inv.lot === ds.lot); if (!confirmBox(linked ? 'Remove this entry and its money record? The account balance goes back.' : 'Remove this entry?')) return; h.lots = h.lots.filter((l) => l.id !== ds.lot); state.txns = state.txns.filter((t) => !(t.inv && t.inv.lot === ds.lot)); save(); render(); holdingDetail(h); },
     symSearch: () => symSearch(),
+    setShare: (ds) => { const f = $$('.sheetwrap').pop(); f.querySelector('[name=share]').value = ds.v; const c = f.querySelector('[name=coOwner]'); if (ds.v === '50' && !c.value) c.value = 'Wife'; if (ds.v === '100') c.value = ''; },
     offBill: (ds) => offBill(state.holdings.find((x) => x.id === ds.id), Number(ds.i)),
     offPay: (ds) => offPay(state.holdings.find((x) => x.id === ds.id), Number(ds.i)),
     offStages: (ds) => offStages(state.holdings.find((x) => x.id === ds.id)),
@@ -1145,13 +1155,13 @@
     return `<h3>Statement of assets & liabilities</h3><small class="muted">As at ${dmy(C.today())} · investments at market prices ${ago(state.pricesAt)}</small>
       <h4>Current (liquid) assets</h4>${accs.filter((a) => (bal[a.id] || 0) >= 0).map((a) => line(a.name + (a.type === 'bank' ? ' (cash in bank)' : ''), bal[a.id] || 0)).join('')}
       ${line('Total liquid assets', s.liquid, 'sub')}
-      <h4>Investments (realisable within days)</h4>${hs.filter((h) => !['property', 'epf'].includes(h.kind)).map((h) => line(h.name + ' (' + kindOf(h.kind)[2] + ')', C.holdingValue(h, fx).value)).join('')}
+      <h4>Investments (realisable within days)</h4>${hs.filter((h) => !['property', 'epf'].includes(h.kind)).map((h) => line(h.name + ' (' + kindOf(h.kind)[2] + (C.share(h) < 1 ? ', ' + fmtN(h.share, 0) + '% share' : '') + ')', C.holdingValue(h, fx).value * C.share(h))).join('')}
       ${line('Total investments', s.sellable, 'sub')}
-      <h4>Long-term assets</h4>${hs.filter((h) => ['property', 'epf'].includes(h.kind)).map((h) => { const v = C.holdingValue(h, fx); return line(h.name + ' (' + kindOf(h.kind)[2] + (v.estimated ? ', estimated' : '') + ')', v.value); }).join('')}
+      <h4>Long-term assets</h4>${hs.filter((h) => ['property', 'epf'].includes(h.kind)).map((h) => { const v = C.holdingValue(h, fx); return line(h.name + ' (' + kindOf(h.kind)[2] + (v.estimated ? ', estimated' : '') + (C.share(h) < 1 ? ', ' + fmtN(h.share, 0) + '% share' : '') + ')', v.value * C.share(h)); }).join('')}
       ${s.insCash ? line('Insurance cash / fund value', s.insCash) : ''}${s.owedToMe + s.splitIn ? line('Amounts owed to me', s.owedToMe + s.splitIn) : ''}
       ${line('Total long-term assets', s.longTerm, 'sub')}
       ${line('Total assets', s.assets, 'total')}
-      <h4>Liabilities</h4>${loans.map((l) => line(l.name, C.loanStatus(l).balance)).join('')}
+      <h4>Liabilities</h4>${loans.map((l) => line(l.name + (C.share(l) < 1 ? ' (' + fmtN(l.share, 0) + '% share)' : ''), C.loanStatus(l).balance * C.share(l))).join('')}
       ${accs.filter((a) => (bal[a.id] || 0) < 0).map((a) => line(a.name, -(bal[a.id] || 0))).join('')}
       ${s.iOwe + s.splitOut ? line('Amounts I owe', s.iOwe + s.splitOut) : ''}${s.devOwe ? line('Balance purchase price owed to developer', s.devOwe) : ''}
       ${line('Total liabilities', s.liabilities, 'total')}
