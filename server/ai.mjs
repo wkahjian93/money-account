@@ -43,6 +43,14 @@ function prompts(task, b) {
       'Reply ONLY with JSON: {"statementDate":"YYYY-MM-DD or null","provider":"","holdings":[{"name":"","units":number|null,"nav":number|null,"navDate":"YYYY-MM-DD|null","value":number|null,"cost":number|null,"type":"equity|bond|money market|mixed|other","matches":"existing holding id or empty"}],"report":{"summary":"2-3 sentences","points":["..."],"check":["..."]}}',
     user: [{ type: 'text', text: 'Read these pages.' + (b.text ? ' Note from the user: ' + String(b.text).slice(0, 1000) : '') }],
   };
+  if (task === 'property') return {
+    system: 'You read screenshots of Malaysian property prices for a personal finance app: past transactions (e.g. Brickz, NAPIC / JPPH, EdgeProp transacted prices) and/or properties listed for sale (e.g. PropertyGuru, iProperty, Mudah). ' + today +
+      ' List EVERY transaction or listing you can see, one item each. kind = "sold" for completed sales / transacted prices / "harga transaksi"; kind = "asking" for listings for sale (asking price). Skip rentals and averages that are not one unit, but if the page only shows a summary like "median RM 520 psf", return it as one item with that psf and a note. ' +
+      'For each item: date (sale date; for listings the posted date or null; month only is fine as YYYY-MM), price in RM, built-up size in sq ft (convert sq m × 10.764), psf if shown, unit type / bedrooms, floor if shown. Numbers must come from the picture: null when not shown, never invent items. ' +
+      'The user\'s property: ' + JSON.stringify(b.property || {}).slice(0, 500) + '. ' +
+      'Reply ONLY with JSON: {"project":"name shown","area":"town / area","items":[{"kind":"sold|asking","date":"YYYY-MM-DD|YYYY-MM|null","price":number|null,"size":number|null,"psf":number|null,"type":"","floor":"","note":""}],"comment":"one short line: what the pictures show and anything unclear"}',
+    user: [{ type: 'text', text: 'Read these screenshots.' + (b.text ? ' Note from the user: ' + String(b.text).slice(0, 500) : '') }],
+  };
   return null;
 }
 

@@ -571,6 +571,34 @@
     });
     return made;
   };
+  // Property market value from comparable sales / listings read off screenshots.
+  // items: [{kind:'sold'|'asking', date, price, size (sq ft), psf, use:false to skip}]. Sold prices are used first.
+  const quant = (sorted, q) => { if (!sorted.length) return NaN; const p = (sorted.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p); return sorted[lo] + (sorted[hi] - sorted[lo]) * (p - lo); };
+  C.marketValue = (items, builtUp, today) => {
+    today = today || C.today();
+    const cut = C.addMonths(today, -24);
+    const rows = (items || []).map((x, i) => {
+      const size = Number(x.size) || 0, price = Number(x.price) || 0;
+      const psf = Number(x.psf) > 0 ? Number(x.psf) : size > 0 && price > 0 ? price / size : 0;
+      return { i, kind: x.kind === 'asking' ? 'asking' : 'sold', date: x.date || '', size, price, psf };
+    }).filter((r, k) => r.psf > 0 && (items[k].use !== false));
+    const recent = rows.filter((r) => r.kind === 'asking' || !r.date || r.date >= cut);
+    const sold = recent.filter((r) => r.kind === 'sold'), asking = recent.filter((r) => r.kind === 'asking');
+    const basis = sold.length ? 'sold' : asking.length ? 'asking' : null;
+    if (!basis) return { basis: null, n: 0 };
+    let pool = basis === 'sold' ? sold : asking;
+    const size = Number(builtUp) || 0;
+    if (size) { const near = pool.filter((r) => r.size && Math.abs(r.size - size) / size <= 0.3); if (near.length >= 3) pool = near; }
+    const ps = pool.map((r) => r.psf).sort((a, b) => a - b);
+    const med = quant(ps, 0.5), lo = quant(ps, 0.25), hi = quant(ps, 0.75);
+    const round = (v) => Math.round(v / 1000) * 1000;
+    const askMed = asking.length ? quant(asking.map((r) => r.psf).sort((a, b) => a - b), 0.5) : null;
+    return {
+      basis, n: pool.length, used: pool.map((r) => r.i), psf: C.r2(med), psfLow: C.r2(lo), psfHigh: C.r2(hi),
+      value: size ? round(med * size) : null, low: size ? round(lo * size) : null, high: size ? round(hi * size) : null,
+      soldN: sold.length, askingN: asking.length, askingPsf: askMed == null ? null : C.r2(askMed),
+    };
+  };
   C.owedLeft = (o) => C.r2(Math.max(0, (Number(o.amount) || 0) - (o.repaid || []).reduce((a, r) => a + (Number(r.amount) || 0), 0)));
 
   if (typeof module !== 'undefined' && module.exports) module.exports = C;

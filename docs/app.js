@@ -493,6 +493,7 @@
       <div class="k-stock"><details><summary class="small muted">Type the price yourself</summary>${fld('Price', inp('mprice', '', 'inputmode="decimal" placeholder="leave blank to use live price"'))}${fld('Currency', '<select name="mcur">' + opt([['MYR', 'MYR'], ['USD', 'USD'], ['SGD', 'SGD'], ['HKD', 'HKD'], ['GBP', 'GBP'], ['EUR', 'EUR'], ['AUD', 'AUD'], ['JPY', 'JPY'], ['CNY', 'CNY']], h.priceCur || 'MYR') + '</select>')}</details></div>
       <div class="k-fd"><div class="grid2">${fld('Amount placed (RM)', money('principal', h.principal))}${fld('Interest % a year', inp('rate', h.rate, 'inputmode="decimal" placeholder="3.5"'))}${fld('Start date', inp('start', h.start || C.today(), 'type="date"'))}${fld('Maturity date', inp('maturity', h.maturity, 'type="date"'))}</div></div>
       <div class="k-epf k-property k-other"><div class="grid2">${fld('Value (RM)', money('value', h.value))}${fld('As at', inp('valueAt', h.valueAt || C.today(), 'type="date"'))}</div></div>
+      <div class="k-property"><div class="grid2">${fld('Project / building', inp('project', h.project, 'placeholder="e.g. Artis 3 Residence"'))}${fld('Built-up (sq ft)', inp('builtUp', h.builtUp, 'inputmode="decimal" placeholder="e.g. 1076"'))}</div>${fld('Unit type', inp('ptype', h.ptype, 'placeholder="e.g. Condo, 3 rooms, mid floor"'))}</div>
       <div class="k-property k-other">${fld('Expected change a year (%)', inp('growth', h.growth, 'inputmode="decimal" placeholder="e.g. 2 — blank = keep value as typed"'), 'The value then moves a little every day from the date above. It is an estimate, not a valuation.')}
         <div class="k-property"><p class="small muted">No service gives a daily market price for one house. For a real figure: recent sales nearby on <a href="https://www.brickz.my" target="_blank" rel="noopener">Brickz</a> (from government transaction records), the state's House Price Index from <a href="https://napic.jpph.gov.my" target="_blank" rel="noopener">NAPIC</a> (every quarter — use its yearly % above), or a bank / valuer's valuation. Type the new value and date when you get one.</p></div></div>
       <div class="k-epf k-property k-other">${fld('Capital put in (RM)', money('cost', h.cost), 'Optional. For property: purchase price. For EPF leave blank.')}</div>
@@ -508,6 +509,7 @@
       if (v.kind === 'stock' && num(v.mprice)) { o.price = num(v.mprice); o.priceCur = v.mcur; o.priceAt = new Date().toISOString(); o.priceSrc = 'typed by you'; }
       if (v.kind === 'fd') Object.assign(o, { principal: C.r2(num(v.principal)), rate: num(v.rate), start: v.start, maturity: v.maturity });
       if (['epf', 'property', 'other'].includes(v.kind)) Object.assign(o, { value: C.r2(num(v.value)), valueAt: v.valueAt, cost: C.r2(num(v.cost)), growth: v.kind !== 'epf' && v.growth !== '' && v.growth != null ? num(v.growth) : undefined });
+      if (v.kind === 'property') Object.assign(o, { project: v.project || undefined, builtUp: num(v.builtUp) || undefined, ptype: v.ptype || undefined });
       if (isNew && ['stock', 'crypto', 'gold', 'fund'].includes(v.kind)) {
         if (!(num(v.units) > 0)) { toast('Enter how many units'); return false; }
         o.lots.push({ id: C.uid(), type: 'buy', date: v.date || C.today(), units: num(v.units), amount: C.r2(num(v.capital)) });
@@ -528,8 +530,74 @@
         <div class="btnrow"><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="buy">＋ Buy more</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="sell">Sell</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="div">Dividend</button></div>
         <h4>History</h4>${lots.map((l) => `<div class="row"><span class="grow">${({ buy: 'Bought', sell: 'Sold', div: 'Dividend' })[l.type]} ${l.type !== 'div' ? fmtU(l.units) + ' units' : ''}<small>${dmy(l.date)}</small></span><b>${rm(l.amount)}</b><button type="button" class="icon small" data-act="delLot" data-id="${h.id}" data-lot="${l.id}">✕</button></div>`).join('')}` : ''}
       ${h.kind === 'fd' ? `<p class="small muted">${rm(h.principal)} at ${h.rate}% from ${dmy(h.start)} to ${dmy(h.maturity)}. Interest so far is counted day by day.${v.matured ? ' <b>Matured</b> — renew or move it, then update here.' : ''}</p>` : ''}
-      ${['epf', 'property', 'other'].includes(h.kind) ? `<p class="small muted">${h.growth ? 'Estimated from ' + rm(h.value) + ' on ' + dmy(h.valueAt) + ', moving ' + fmtN(h.growth, 1) + '% a year, day by day. Not a valuation.' : 'Value typed by you on ' + dmy(h.valueAt) + '.'} Update it when you get a new statement or valuation.</p>` : ''}
+      ${['epf', 'property', 'other'].includes(h.kind) ? `<p class="small muted">${h.growth ? 'Estimated from ' + rm(h.value) + ' on ' + dmy(h.valueAt) + ', moving ' + fmtN(h.growth, 1) + '% a year, day by day. Not a valuation.' : (h.mkt && h.mkt.date === h.valueAt ? 'Value from your market price check on ' : 'Value typed by you on ') + dmy(h.valueAt) + '.'} Update it when you get a new statement or valuation.</p>` : ''}
+      ${h.kind === 'property' ? mktInfo(h) + '<button type="button" class="btn primary" data-act="mktCheck" data-id="' + h.id + '">📷 Check market price</button>' : ''}
       <div class="btnrow"><button type="button" class="btn" data-act="editHolding" data-id="${h.id}">✎ Edit</button><button type="button" class="btn danger" data-act="delHolding" data-id="${h.id}">Delete</button></div>`);
+  }
+  // ----- property: market price from screenshots of sales (Brickz) or listings (PropertyGuru) -----
+  function mktInfo(h) {
+    const m = h.mkt; if (!m) return '';
+    return '<p class="small">Last check ' + dmy(m.date) + ': ' + (m.basis === 'sold' ? m.n + ' recent sale' + (m.n > 1 ? 's' : '') : m.n + ' asking price' + (m.n > 1 ? 's' : '') + ' (not sales)') + ' · median ' + rm(m.psf) + ' psf' + (m.low ? ' · range ' + rm(m.low, { d: 0 }) + ' – ' + rm(m.high, { d: 0 }) : '') + (m.imgs && m.imgs.length ? ' · <a href="#" data-act="mktImgs" data-id="' + h.id + '">screenshots</a>' : '') + '</p>';
+  }
+  let mktPhotos = [];
+  function mktCheck(h) {
+    mktPhotos = [];
+    openSheet('📷 Market price · ' + h.name, `
+      <p class="small muted">1. Open your project on <a href="https://www.brickz.my" target="_blank" rel="noopener">Brickz</a> (past sales, from government records) and screenshot the list of transactions. Listings from PropertyGuru / iProperty also work, but those are asking prices — usually higher than what really sells.<br>2. Add the screenshots here. AI reads every sale; the app works out the median price per sq ft for units like yours and × your size.</p>
+      ${!h.builtUp ? fld('Your built-up (sq ft)', inp('mktSize', '', 'inputmode="decimal" id="mktSize" placeholder="e.g. 1076"')) : ''}
+      <div class="btnrow"><label class="btn primary">🖼️ Add screenshots<input type="file" accept="image/*" multiple hidden data-change="mktPick"></label></div>
+      <div class="thumbs" id="mktthumbs"></div>
+      <button type="button" class="btn primary big" data-act="mktRead" data-id="${h.id}">✨ Read prices</button>
+      ${!aiServer() ? '<p class="small warn">Needs the server link (More → Settings).</p>' : ''}`);
+  }
+  async function mktPick(el) {
+    for (const f of el.files) { try { mktPhotos.push(await S.compress(f)); } catch (e) {} }
+    el.value = '';
+    $('#mktthumbs').innerHTML = mktPhotos.map((s) => '<div class="thumb"><img src="' + s + '"></div>').join('');
+  }
+  async function mktRead(h) {
+    if (!mktPhotos.length) { toast('Add at least one screenshot'); return; }
+    const size = num(($('#mktSize') || {}).value); if (size > 0) h.builtUp = size;
+    const btn = $('[data-act=mktRead]'); btn.disabled = true; btn.textContent = '⏳ Reading… (up to a minute)';
+    try {
+      const r = await aiCall('property', { images: mktPhotos, property: { name: h.name, project: h.project, builtUp: h.builtUp, type: h.ptype } });
+      mktReview(h, r, mktPhotos.slice());
+    } catch (e) { toast(e.message, 5000); btn.disabled = false; btn.textContent = '✨ Read prices'; }
+  }
+  function mktReview(h, r, photos) {
+    const fixDate = (d) => (/^\d{4}-\d\d$/.test(d || '') ? d + '-15' : /^\d{4}-\d\d-\d\d$/.test(d || '') ? d : '');
+    const items = (r.items || []).filter((x) => x && (x.price || x.psf)).map((x) => ({ kind: x.kind === 'asking' ? 'asking' : 'sold', date: fixDate(x.date), price: x.price, size: x.size, psf: x.psf, type: x.type || '', floor: x.floor || '', note: x.note || '' }));
+    const d = openSheet('Market price check', `
+      ${r.standIn ? '<p class="warn small">TEST MODE: stand-in AI reply, not a real reading.</p>' : ''}
+      <p class="small muted">${esc([r.project, r.area].filter(Boolean).join(' · '))}${r.comment ? ' — ' + esc(r.comment) : ''}</p>
+      ${fld('Your built-up (sq ft)', inp('size', h.builtUp || '', 'inputmode="decimal"'))}
+      <div id="mktsum" class="card inset"></div>
+      <h4>What AI read (untick any that are not like your unit)</h4>
+      ${items.map((x, i) => '<label class="row"><input type="checkbox" name="use_' + i + '" checked><span class="grow">' + (x.kind === 'sold' ? '✅ Sold' : '🏷️ Asking') + (x.date ? ' · ' + dmy(x.date) : '') + '<small>' + [x.size ? fmtN(x.size, 0) + ' sq ft' : '', x.type, x.floor ? 'floor ' + x.floor : '', x.note].filter(Boolean).map(esc).join(' · ') + '</small></span><span class="right"><b>' + (x.price ? rm(x.price, { d: 0 }) : '') + '</b><small>' + (x.psf || (x.price && x.size) ? rm(x.psf || x.price / x.size) + ' psf' : '') + '</small></span></label>').join('') || '<p class="muted">No prices found in the screenshots.</p>'}
+      ${fld('Value to save (RM)', money('value', ''), 'Filled in from the median. Change it if you know better (e.g. renovated, corner unit).')}
+      <small class="muted">An estimate from other units' prices, not a valuation. Banks and valuers may differ.</small>`, (v) => {
+      if (!(num(v.value) > 0)) { toast('Enter the value to save'); return false; }
+      const m = C.marketValue(items.map((x, i) => Object.assign({}, x, { use: !!v['use_' + i] })), num(v.size));
+      const ids = photos.map(() => 'm_' + C.uid());
+      photos.forEach((p, i) => S.putImg(ids[i], p));
+      if (num(v.size) > 0) h.builtUp = num(v.size);
+      if (!h.project && r.project) h.project = r.project;
+      h.value = C.r2(num(v.value)); h.valueAt = C.today();
+      h.mkt = { date: C.today(), basis: m.basis, n: m.n, psf: m.psf, low: m.low, high: m.high, askingPsf: m.askingPsf, imgs: ids, source: items.some((x) => x.kind === 'sold') ? 'sales screenshots' : 'listing screenshots' };
+      save(); render(); toast('Saved ' + rm(h.value, { d: 0 }) + ' as at today ✓'); holdingDetail(h); return false;
+    }, { saveText: 'Save value' });
+    const sh = d.querySelector ? d : $$('.sheetwrap').pop();
+    let touched = false;
+    const calc = (e) => {
+      if (e && e.target && e.target.name === 'value') { touched = true; return; }
+      const f = formVals(sh), m = C.marketValue(items.map((x, i) => Object.assign({}, x, { use: !!f['use_' + i] })), num(f.size));
+      const box = sh.querySelector('#mktsum');
+      if (!m.basis) { box.innerHTML = '<p class="muted small">Tick at least one price.</p>'; return; }
+      box.innerHTML = '<div class="stats3"><div><small>Median</small><b>' + rm(m.psf) + '</b><small>per sq ft</small></div><div><small>Your unit</small><b>' + (m.value ? rm(m.value, { d: 0 }) : '—') + '</b><small>' + (m.value ? '' : 'type your size') + '</small></div><div><small>Range</small><b>' + (m.low ? rm(m.low, { d: 0 }) : '—') + '</b><small>' + (m.high ? 'to ' + rm(m.high, { d: 0 }) : '') + '</small></div></div>' +
+        '<p class="small ' + (m.basis === 'asking' ? 'warn' : 'muted') + '">' + (m.basis === 'sold' ? 'From ' + m.n + ' sale' + (m.n > 1 ? 's' : '') + ' in the last 2 years' + (num(f.size) ? ', sizes close to yours where possible' : '') + '.' + (m.askingPsf ? ' Asking prices now: ' + rm(m.askingPsf) + ' psf (not used).' : '') : 'Only asking prices — what sellers hope for, usually higher than what sells. Add Brickz sales for a truer figure.') + '</p>';
+      const vi = sh.querySelector('[name=value]'); if (vi && !touched && m.value) vi.value = m.value;
+    };
+    sh.addEventListener('input', calc); sh.addEventListener('change', calc); calc();
   }
   function lotForm(h, type) {
     openSheet(({ buy: 'Buy more ', sell: 'Sell ', div: 'Dividend from ' })[type] + h.name, `
@@ -779,6 +847,9 @@
     lot: (ds) => lotForm(state.holdings.find((h) => h.id === ds.id), ds.t),
     delLot: (ds) => { const h = state.holdings.find((x) => x.id === ds.id); const linked = state.txns.some((t) => t.inv && t.inv.lot === ds.lot); if (!confirmBox(linked ? 'Remove this entry and its money record? The account balance goes back.' : 'Remove this entry?')) return; h.lots = h.lots.filter((l) => l.id !== ds.lot); state.txns = state.txns.filter((t) => !(t.inv && t.inv.lot === ds.lot)); save(); render(); holdingDetail(h); },
     symSearch: () => symSearch(),
+    mktCheck: (ds) => mktCheck(state.holdings.find((x) => x.id === ds.id)),
+    mktRead: (ds) => mktRead(state.holdings.find((x) => x.id === ds.id)),
+    mktImgs: async (ds) => { const h = state.holdings.find((x) => x.id === ds.id); const imgs = []; for (const id of (h.mkt && h.mkt.imgs) || []) { const s = await S.getImg(id); if (s) imgs.push(s); } if (!imgs.length) { toast('Screenshots not found on this phone'); return; } openSheet('Screenshots · ' + h.name, imgs.map((s) => '<img src="' + s + '" style="width:100%;border-radius:10px;margin-bottom:8px">').join('')); },
     fundSearch: async () => {
       const q = ($('#fundq') || {}).value, box = $('#fundres'); if (!q) return;
       box.innerHTML = '<p class="small muted">Searching today’s fund prices…</p>';
@@ -1483,7 +1554,7 @@
     viewReport: (ds) => viewReport(ds.id),
     delReport: (ds) => { if (!confirmBox('Delete this report?')) return; state.reports = state.reports.filter((r) => r.id !== ds.id); save(); closeSheet(); render(); },
   });
-  Object.assign(CHANGE, { receiptPick: (el) => receiptPick(el), investPick: (el) => investPick(el) });
+  Object.assign(CHANGE, { receiptPick: (el) => receiptPick(el), investPick: (el) => investPick(el), mktPick: (el) => mktPick(el) });
 
   // ---------- money sound ----------
   let actx = null;

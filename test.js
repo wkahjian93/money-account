@@ -155,5 +155,25 @@ eq('csv', C.csv([['a,b', 'x"y']]), '﻿"a,b","x""y"');
   eq('groups add up', C.r2(s.liquid + s.sellable + s.longTerm), s.assets);
 }
 
+// property market value
+{
+  const items = [
+    { kind: 'sold', date: '2026-06-01', price: 600000, size: 1000 },
+    { kind: 'sold', date: '2026-03-01', price: 660000, size: 1100 },
+    { kind: 'sold', date: '2025-12-01', psf: 580, size: 1050 },
+    { kind: 'sold', date: '2023-01-01', price: 400000, size: 1000 },
+    { kind: 'sold', date: '2026-05-01', price: 900000, size: 2000 },
+    { kind: 'asking', price: 750000, size: 1000 },
+  ];
+  const m = C.marketValue(items, 1000, '2026-11-19');
+  eq('mv basis sold, old sale + big unit left out', [m.basis, m.n, m.used], ['sold', 3, [0, 1, 2]]);
+  eq('mv median psf', m.psf, 600);
+  eq('mv value', m.value, 600000);
+  eq('mv asking kept apart', [m.askingN, m.askingPsf], [1, 750]);
+  const a = C.marketValue([{ kind: 'asking', price: 700000, size: 1000 }, { kind: 'asking', price: 800000, size: 1000 }], 1000, '2026-11-19');
+  eq('mv asking only', [a.basis, a.value], ['asking', 750000]);
+  eq('mv skip unticked', C.marketValue(items.map((x, i) => Object.assign({}, x, { use: i !== 0 })), 1000, '2026-11-19').psf, 580);
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
