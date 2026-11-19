@@ -175,5 +175,21 @@ eq('csv', C.csv([['a,b', 'x"y']]), '﻿"a,b","x""y"');
   eq('mv skip unticked', C.marketValue(items.map((x, i) => Object.assign({}, x, { use: i !== 0 })), 1000, '2026-11-19').psf, 580);
 }
 
+// new launch property
+{
+  eq('schedule H adds to 100', C.r2(C.SCHEDULE_H.reduce((a, s) => a + s[1], 0)), 100);
+  eq('21 working days', C.addWorkdays('2026-11-19', 21), '2026-12-18');
+  const h = { kind: 'property', offplan: { price: 700000, rebate: 50000, stages: C.SCHEDULE_H.map(([l, pct]) => ({ l, pct })) } };
+  h.offplan.stages[0].paid = '2026-01-10'; h.offplan.stages[1].paid = '2026-06-01'; h.offplan.stages[2].billed = '2026-11-01';
+  const st = C.offplanStatus(h, '2026-12-15');
+  eq('offplan net/paid/billed', [st.net, st.paid, st.billedUnpaid, st.pctPaid], [650000, 130000, 97500, 20]);
+  eq('offplan due + late', [st.owing[0].due, st.owing[0].late], ['2026-11-30', true]);
+  eq('offplan value = paid so far', C.holdingValue(h, {}, '2026-12-15').value, 130000);
+  h.offplan.done = true; h.value = 650000;
+  eq('after keys: normal value', C.holdingValue(h, {}, '2026-12-15').value, 650000);
+  const sm = C.summary({ accounts: [], txns: [], holdings: [h], owed: [], loans: [], policies: [], split: { groups: [] } }, '2026-12-15');
+  eq('after keys: unpaid owed to developer', [sm.devOwe, sm.netWorth], [520000, 130000]);
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

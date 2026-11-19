@@ -201,6 +201,7 @@
       if (!(value >= 0)) value = pos.cost; // no price yet: show at cost
       return { value: C.r2(value), cost: pos.cost, pl: C.r2(value - pos.cost), units: pos.units, realized: pos.realized, income: pos.income, live: px > 0 };
     }
+    if (h.offplan && !h.offplan.done) { const st = C.offplanStatus(h, today); return { value: st.paid, cost: st.paid, pl: 0, units: 0, live: false, offplan: true }; }
     const base = Number(h.value) || 0, cost = Number(h.cost) || 0, g = Number(h.growth) || 0;
     const days = g && h.valueAt ? Math.max(0, C.daysBetween(h.valueAt, today)) : 0;
     const value = g ? base * Math.pow(1 + g / 100, days / 365) : base;
@@ -533,14 +534,16 @@
     });
     let insCash = 0; (state.policies || []).forEach((p) => { if (p.status !== 'lapsed' && p.status !== 'ended') insCash += Number(p.cashValue) || 0; });
     let loans = 0; (state.loans || []).forEach((l) => { if (!l.archived) loans += C.loanStatus(l, today).balance; });
+    // after the keys the property counts at full price, so stages not yet paid are owed to the developer
+    let devOwe = 0; (state.holdings || []).forEach((h) => { if (!h.archived && h.offplan && h.offplan.done) devOwe += C.offplanStatus(h, today).toPay; });
     const assets = cash + invest + property + retire + owedToMe + splitIn + insCash;
     // Liquidity: money usable now / investments you can sell within days / long-term or locked
     const liquid = cash, sellable = invest, longTerm = property + retire + insCash + owedToMe + splitIn;
-    const liabilities = loans + cardDebt + iOwe + splitOut;
+    const liabilities = loans + cardDebt + iOwe + splitOut + devOwe;
     return {
       cash: C.r2(cash), cardDebt: C.r2(cardDebt), invest: C.r2(invest), investCost: C.r2(investCost), investPL: C.r2(invest - investCost),
       property: C.r2(property), retire: C.r2(retire), owedToMe: C.r2(owedToMe), iOwe: C.r2(iOwe), splitIn: C.r2(splitIn), splitOut: C.r2(splitOut),
-      insCash: C.r2(insCash), loans: C.r2(loans), assets: C.r2(assets), cashBy: { bank: C.r2(cashBy.bank), cash: C.r2(cashBy.cash), ewallet: C.r2(cashBy.ewallet), other: C.r2(cashBy.other) }, liquid: C.r2(liquid), sellable: C.r2(sellable), longTerm: C.r2(longTerm), liabilities: C.r2(liabilities), netWorth: C.r2(assets - liabilities), byKind,
+      insCash: C.r2(insCash), loans: C.r2(loans), devOwe: C.r2(devOwe), assets: C.r2(assets), cashBy: { bank: C.r2(cashBy.bank), cash: C.r2(cashBy.cash), ewallet: C.r2(cashBy.ewallet), other: C.r2(cashBy.other) }, liquid: C.r2(liquid), sellable: C.r2(sellable), longTerm: C.r2(longTerm), liabilities: C.r2(liabilities), netWorth: C.r2(assets - liabilities), byKind,
     };
   };
   // Monthly repayment plan: o.plan = { amount, start (first payment date), auto (reduce by itself), posted (last due date handled) }
@@ -598,6 +601,29 @@
       value: size ? round(med * size) : null, low: size ? round(lo * size) : null, high: size ? round(hi * size) : null,
       soldN: sold.length, askingN: asking.length, askingPsf: askMed == null ? null : C.r2(askMed),
     };
+  };
+  // ---------- new launch (under construction) property ----------
+  // Starting template from Schedule H (strata) Third Schedule, HBA copy of the Regulations 1989 — the buyer edits it to match their SPA.
+  C.SCHEDULE_H = [
+    ['Signing the SPA', 10], ['Foundation & piling', 10], ['Concrete frame & floor slab', 15], ['Walls, door & window frames', 10],
+    ['Roof, wiring, plumbing', 10], ['Plastering', 10], ['Sewerage', 5], ['Drains', 5], ['Roads', 5],
+    ['Vacant possession (keys)', 12.5], ['Strata subdivision accepted', 2.5], ['Stakeholder: 6 months after keys', 2.5], ['Stakeholder: 18 months after keys', 2.5],
+  ];
+  C.addWorkdays = (s, n) => { const d = C.parse(s); let k = 0; while (k < n) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) k++; } return C.iso(d); };
+  C.offplanStatus = (h, today) => {
+    const o = h.offplan || {}, net = C.r2((Number(o.price) || 0) - (Number(o.rebate) || 0));
+    let paid = 0, billed = 0, pct = 0, pctPaid = 0;
+    const stages = (o.stages || []).map((s, i) => {
+      const amount = C.r2(net * (Number(s.pct) || 0) / 100);
+      pct += Number(s.pct) || 0;
+      if (s.paid) { paid += amount; pctPaid += Number(s.pct) || 0; }
+      const owing = s.billed && !s.paid;
+      if (owing) billed += amount;
+      const due = owing ? C.addWorkdays(s.billed, 21) : null;
+      return { i, label: s.l, pct: Number(s.pct) || 0, amount, billed: s.billed || '', paid: s.paid || '', due, late: !!(due && due < (today || C.today())) };
+    });
+    const next = stages.find((s) => !s.billed && !s.paid);
+    return { net, paid: C.r2(paid), billedUnpaid: C.r2(billed), toPay: C.r2(net - paid), pctPaid: C.r2(pctPaid), pctTotal: C.r2(pct), stages, next, owing: stages.filter((s) => s.billed && !s.paid) };
   };
   C.owedLeft = (o) => C.r2(Math.max(0, (Number(o.amount) || 0) - (o.repaid || []).reduce((a, r) => a + (Number(r.amount) || 0), 0)));
 

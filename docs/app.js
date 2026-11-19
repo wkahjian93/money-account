@@ -94,7 +94,7 @@
       ['🏛️ Long-term — hard to turn into cash', s.longTerm, [['🏠', 'Property', s.property, 'wealth'], ['👴', 'EPF / retirement', s.retire, 'wealth'], ['🛡️', 'Insurance cash / fund value', s.insCash, 'insurance'], ['🤝', 'People owe me', s.owedToMe + s.splitIn, 'wealth']]],
     ].map(([t, v, list]) => [t, v, list.filter((x) => x[2])]).filter((g) => g[1]);
     const rows = LIQ.flatMap((g) => g[2]);
-    const neg = [['🏦', 'Loans outstanding', s.loans, 'wealth'], ['💳', 'Credit card balance', s.cardDebt, 'wealth'], ['🙏', 'I owe others', s.iOwe + s.splitOut, 'wealth']].filter((x) => x[2]);
+    const neg = [['🏦', 'Loans outstanding', s.loans, 'wealth'], ['💳', 'Credit card balance', s.cardDebt, 'wealth'], ['🙏', 'I owe others', s.iOwe + s.splitOut, 'wealth'], ['🏗️', 'Still owed to developer', s.devOwe, 'wealth']].filter((x) => x[2]);
     const line = (x, sign) => `<a class="row" href="#/${x[3]}"><span class="ic">${x[0]}</span><span class="grow">${x[1]}${x[4] ? '<small>' + x[4] + '</small>' : ''}</span><b class="${sign < 0 ? 'down' : ''}">${sign < 0 ? '−' : ''}${rm(x[2])}</b></a>`;
     // emergency fund: months of spending covered by cash
     const last3 = [1, 2, 3].map((k) => C.monthStats(state.txns, C.addMonths(ym + '-01', -k).slice(0, 7)).expense).filter((x) => x > 0);
@@ -148,6 +148,7 @@
       const amt = Math.min(num(o.plan.amount), C.owedLeft(o));
       out.push(`<div class="row"><span class="ic">📅</span><span class="grow">${esc(o.person)} ${o.dir === 'out' ? 'you pay' : 'pays you'} monthly · due ${dmy(due)}<small>${rm(C.owedLeft(o))} still owing</small></span><b>${rm(amt)}</b><button type="button" class="btn small primary" data-act="owedGot" data-id="${o.id}">✓ ${o.dir === 'out' ? 'Paid' : 'Got it'}</button><button type="button" class="btn small ghost" data-act="owedMiss" data-id="${o.id}">Missed</button></div>`);
     });
+    state.holdings.forEach((h) => { if (!h.offplan) return; C.offplanStatus(h, t).owing.forEach((s) => out.push(`<button class="row" data-act="openHolding" data-id="${h.id}"><span class="ic">🏗️</span><span class="grow">${esc(s.label)} — ${s.late ? '<b class="warn">late</b>' : 'pay by ' + dmy(s.due)}<small>${esc(h.project || h.name)} · progress billing</small></span><b>${rm(s.amount, { d: 0 })}</b></button>`)); });
     const lb = state.settings.lastBackup;
     if (!lb || Date.now() - new Date(lb) > 14 * 864e5) out.push(`<a class="row" href="#/settings"><span class="ic">💾</span><span class="grow">Backup ${lb ? 'last made ' + ago(lb) : 'not made yet'}<small>Your records live only on this phone. Tap to back up.</small></span></a>`);
     return out;
@@ -493,6 +494,9 @@
       <div class="k-stock"><details><summary class="small muted">Type the price yourself</summary>${fld('Price', inp('mprice', '', 'inputmode="decimal" placeholder="leave blank to use live price"'))}${fld('Currency', '<select name="mcur">' + opt([['MYR', 'MYR'], ['USD', 'USD'], ['SGD', 'SGD'], ['HKD', 'HKD'], ['GBP', 'GBP'], ['EUR', 'EUR'], ['AUD', 'AUD'], ['JPY', 'JPY'], ['CNY', 'CNY']], h.priceCur || 'MYR') + '</select>')}</details></div>
       <div class="k-fd"><div class="grid2">${fld('Amount placed (RM)', money('principal', h.principal))}${fld('Interest % a year', inp('rate', h.rate, 'inputmode="decimal" placeholder="3.5"'))}${fld('Start date', inp('start', h.start || C.today(), 'type="date"'))}${fld('Maturity date', inp('maturity', h.maturity, 'type="date"'))}</div></div>
       <div class="k-epf k-property k-other"><div class="grid2">${fld('Value (RM)', money('value', h.value))}${fld('As at', inp('valueAt', h.valueAt || C.today(), 'type="date"'))}</div></div>
+      <div class="k-property"><label class="row"><input type="checkbox" name="isOff" ${h.offplan && !h.offplan.done ? 'checked' : ''}><span class="grow"><b>🏗️ New launch — still being built</b><small>Track the SPA price, each progress billing and handover.</small></span></label>
+        <div class="grid2">${fld('SPA price (RM)', money('offPrice', (h.offplan || {}).price))}${fld('Rebate / discount (RM)', money('offRebate', (h.offplan || {}).rebate))}${fld('SPA signed', inp('offSpa', (h.offplan || {}).spaDate || C.today(), 'type="date"'))}${fld('Expected keys', inp('offVp', (h.offplan || {}).vpDue, 'type="date"'))}</div>
+        <small class="muted">For a new launch, fill these and leave “Value” blank. Under the standard SPA (Schedule H) keys are due within 36 months of signing.</small></div>
       <div class="k-property"><div class="grid2">${fld('Project / building', inp('project', h.project, 'placeholder="e.g. Artis 3 Residence"'))}${fld('Built-up (sq ft)', inp('builtUp', h.builtUp, 'inputmode="decimal" placeholder="e.g. 1076"'))}</div>${fld('Unit type', inp('ptype', h.ptype, 'placeholder="e.g. Condo, 3 rooms, mid floor"'))}</div>
       <div class="k-property k-other">${fld('Expected change a year (%)', inp('growth', h.growth, 'inputmode="decimal" placeholder="e.g. 2 — blank = keep value as typed"'), 'The value then moves a little every day from the date above. It is an estimate, not a valuation.')}
         <div class="k-property"><p class="small muted">No service gives a daily market price for one house. For a real figure: recent sales nearby on <a href="https://www.brickz.my" target="_blank" rel="noopener">Brickz</a> (from government transaction records), the state's House Price Index from <a href="https://napic.jpph.gov.my" target="_blank" rel="noopener">NAPIC</a> (every quarter — use its yearly % above), or a bank / valuer's valuation. Type the new value and date when you get one.</p></div></div>
@@ -509,6 +513,13 @@
       if (v.kind === 'stock' && num(v.mprice)) { o.price = num(v.mprice); o.priceCur = v.mcur; o.priceAt = new Date().toISOString(); o.priceSrc = 'typed by you'; }
       if (v.kind === 'fd') Object.assign(o, { principal: C.r2(num(v.principal)), rate: num(v.rate), start: v.start, maturity: v.maturity });
       if (['epf', 'property', 'other'].includes(v.kind)) Object.assign(o, { value: C.r2(num(v.value)), valueAt: v.valueAt, cost: C.r2(num(v.cost)), growth: v.kind !== 'epf' && v.growth !== '' && v.growth != null ? num(v.growth) : undefined });
+      if (v.kind === 'property' && v.isOff) {
+        if (!(num(v.offPrice) > 0)) { toast('Enter the SPA price'); return false; }
+        o.offplan = Object.assign(o.offplan || { stages: C.SCHEDULE_H.map(([l, pct]) => ({ l, pct })) }, { price: C.r2(num(v.offPrice)), rebate: C.r2(num(v.offRebate)), spaDate: v.offSpa, vpDue: v.offVp || undefined, done: false });
+        const net = C.r2(num(v.offPrice) - num(v.offRebate));
+        if (!(num(v.value) > 0)) { o.value = net; o.valueAt = v.offVp || v.offSpa; }
+        if (!(num(v.cost) > 0)) o.cost = net;
+      } else if (v.kind === 'property' && o.offplan && !o.offplan.done) delete o.offplan;
       if (v.kind === 'property') Object.assign(o, { project: v.project || undefined, builtUp: num(v.builtUp) || undefined, ptype: v.ptype || undefined });
       if (isNew && ['stock', 'crypto', 'gold', 'fund'].includes(v.kind)) {
         if (!(num(v.units) > 0)) { toast('Enter how many units'); return false; }
@@ -530,9 +541,49 @@
         <div class="btnrow"><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="buy">＋ Buy more</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="sell">Sell</button><button type="button" class="btn" data-act="lot" data-id="${h.id}" data-t="div">Dividend</button></div>
         <h4>History</h4>${lots.map((l) => `<div class="row"><span class="grow">${({ buy: 'Bought', sell: 'Sold', div: 'Dividend' })[l.type]} ${l.type !== 'div' ? fmtU(l.units) + ' units' : ''}<small>${dmy(l.date)}</small></span><b>${rm(l.amount)}</b><button type="button" class="icon small" data-act="delLot" data-id="${h.id}" data-lot="${l.id}">✕</button></div>`).join('')}` : ''}
       ${h.kind === 'fd' ? `<p class="small muted">${rm(h.principal)} at ${h.rate}% from ${dmy(h.start)} to ${dmy(h.maturity)}. Interest so far is counted day by day.${v.matured ? ' <b>Matured</b> — renew or move it, then update here.' : ''}</p>` : ''}
-      ${['epf', 'property', 'other'].includes(h.kind) ? `<p class="small muted">${h.growth ? 'Estimated from ' + rm(h.value) + ' on ' + dmy(h.valueAt) + ', moving ' + fmtN(h.growth, 1) + '% a year, day by day. Not a valuation.' : (h.mkt && h.mkt.date === h.valueAt ? 'Value from your market price check on ' : 'Value typed by you on ') + dmy(h.valueAt) + '.'} Update it when you get a new statement or valuation.</p>` : ''}
-      ${h.kind === 'property' ? mktInfo(h) + '<button type="button" class="btn primary" data-act="mktCheck" data-id="' + h.id + '">📷 Check market price</button>' : ''}
+      ${['epf', 'property', 'other'].includes(h.kind) && !(h.offplan && !h.offplan.done) ? `<p class="small muted">${h.growth ? 'Estimated from ' + rm(h.value) + ' on ' + dmy(h.valueAt) + ', moving ' + fmtN(h.growth, 1) + '% a year, day by day. Not a valuation.' : (h.mkt && h.mkt.date === h.valueAt ? 'Value from your market price check on ' : 'Value typed by you on ') + dmy(h.valueAt) + '.'} Update it when you get a new statement or valuation.</p>` : ''}
+      ${h.offplan && !h.offplan.done ? offplanHTML(h) : (h.offplan && C.offplanStatus(h).toPay > 0 ? offplanHTML(h) : '') + (h.kind === 'property' ?  mktInfo(h) + '<button type="button" class="btn primary" data-act="mktCheck" data-id="' + h.id + '">📷 Check market price</button>' : '')}
       <div class="btnrow"><button type="button" class="btn" data-act="editHolding" data-id="${h.id}">✎ Edit</button><button type="button" class="btn danger" data-act="delHolding" data-id="${h.id}">Delete</button></div>`);
+  }
+  // ----- new launch: progress billing -----
+  function offplanHTML(h) {
+    const st = C.offplanStatus(h), o = h.offplan;
+    const w = st.net ? Math.min(100, st.paid / st.net * 100) : 0;
+    return (o.done ? '<p class="small">🔑 Keys received ' + dmy(o.vpDate) + '. Stages not yet paid are counted as owed to the developer.</p>' : '<p class="small">🏗️ <b>Under construction</b>' + (o.vpDue ? ' · keys expected ' + dmy(o.vpDue) : '') + '. Counted in your assets at what you have paid so far.</p>') +
+      '<div class="liqbar"><i class="l1" style="width:' + w + '%"></i></div>' +
+      '<div class="stats3"><div><small>Price after rebate</small><b>' + rm(st.net, { d: 0 }) + '</b></div><div><small>Paid (' + fmtN(st.pctPaid, 1) + '%)</small><b class="up">' + rm(st.paid, { d: 0 }) + '</b></div><div><small>Still to pay</small><b>' + rm(st.toPay, { d: 0 }) + '</b>' + (st.billedUnpaid ? '<small class="warn">' + rm(st.billedUnpaid, { d: 0 }) + ' billed</small>' : '') + '</div></div>' +
+      (Math.abs(st.pctTotal - 100) > 0.01 ? '<p class="small warn">Stages add up to ' + fmtN(st.pctTotal, 1) + '%, not 100%. Edit the stages.</p>' : '') +
+      '<h4>Progress billing</h4>' + st.stages.map((s) => '<div class="row"><span class="grow">' + (s.paid ? '✅ ' : s.billed ? (s.late ? '⚠️ ' : '🧾 ') : '⬜ ') + esc(s.label) + '<small>' + fmtN(s.pct, 1) + '%' + (s.paid ? ' · paid ' + dmy(s.paid) : s.billed ? ' · billed ' + dmy(s.billed) + ' · pay by ' + dmy(s.due) + (s.late ? ' — late, SPA charges interest' : '') : '') + '</small></span><b>' + rm(s.amount, { d: 0 }) + '</b>' +
+        (s.paid ? '<button type="button" class="icon small" data-act="offUndo" data-id="' + h.id + '" data-i="' + s.i + '">↺</button>' : s.billed ? '<button type="button" class="btn small primary" data-act="offPay" data-id="' + h.id + '" data-i="' + s.i + '">Paid</button>' : '<button type="button" class="btn small" data-act="offBill" data-id="' + h.id + '" data-i="' + s.i + '">Billed</button>') + '</div>').join('') +
+      '<small class="muted">Stages start from the standard SPA (Schedule H). Your own SPA’s Third Schedule rules — tap ✎ Stages to match it.</small>' +
+      '<div class="btnrow"><button type="button" class="btn" data-act="offStages" data-id="' + h.id + '">✎ Stages</button>' + (o.done ? '' : '<button type="button" class="btn primary" data-act="offKeys" data-id="' + h.id + '">🔑 Got the keys</button>') + '</div>';
+  }
+  function offBill(h, i) {
+    const s = h.offplan.stages[i];
+    openSheet('Billed: ' + s.l, fld('Date of the developer’s notice', inp('date', C.today(), 'type="date"')) + '<p class="small muted">Under the standard SPA you have 21 working days from the notice to pay.</p>', (v) => {
+      s.billed = v.date || C.today(); save(); render(); holdingDetail(h); return false;
+    }, { saveText: 'Save' });
+  }
+  function offPay(h, i) {
+    const s = h.offplan.stages[i], st = C.offplanStatus(h), amount = st.stages[i].amount;
+    const accs = state.accounts.filter((a) => !a.archived).map((a) => [a.id, 'From ' + a.name]);
+    openSheet('Paid: ' + s.l, '<p>' + rm(amount) + '</p>' + fld('Date paid', inp('date', C.today(), 'type="date"')) + fld('Who paid', '<select name="from">' + opt([['loan', '🏦 My housing loan (bank paid the developer)']].concat(accs), 'loan') + '</select>', 'Paid from your own account: the money moves into the property (not spending).'), (v) => {
+      s.paid = v.date || C.today(); if (!s.billed) s.billed = s.paid;
+      if (v.from !== 'loan') { const t = { id: C.uid(), at: new Date().toISOString(), type: 'transfer', cat: '', amount, date: s.paid, account: v.from, note: 'Progress payment: ' + s.l + ' · ' + (h.project || h.name), inv: { holding: h.id, side: 'buy', stage: i } }; state.txns.push(t); s.txn = t.id; }
+      save(); render(); holdingDetail(h); toast('✓ Paid ' + rm(amount, { d: 0 })); return false;
+    }, { saveText: 'Save' });
+  }
+  function offStages(h) {
+    const rows = h.offplan.stages;
+    openSheet('Payment stages', '<p class="small muted">Copy from the Third Schedule of your SPA. Percentages must add up to 100.</p>' + rows.map((s, i) => '<div class="grid2">' + inp('l_' + i, s.l) + inp('p_' + i, s.pct, 'inputmode="decimal"') + '</div>').join('') + '<div class="grid2">' + inp('l_new', '', 'placeholder="Add a stage"') + inp('p_new', '', 'inputmode="decimal" placeholder="%"') + '</div><p class="small" id="stTot"></p>', (v) => {
+      const next = rows.map((s, i) => Object.assign({}, s, { l: v['l_' + i], pct: num(v['p_' + i]) })).filter((s) => s.l && s.pct > 0);
+      if (v.l_new && num(v.p_new) > 0) next.push({ l: v.l_new, pct: num(v.p_new) });
+      const tot = C.r2(next.reduce((a, s) => a + s.pct, 0));
+      if (Math.abs(tot - 100) > 0.01 && !confirmBox('Stages add up to ' + tot + '%, not 100%. Save anyway?')) return false;
+      h.offplan.stages = next; save(); render(); holdingDetail(h); return false;
+    }, { saveText: 'Save stages' });
+    const sh = $$('.sheetwrap').pop(), tot = () => { const f = formVals(sh); let t = 0; Object.keys(f).forEach((k) => { if (/^p_/.test(k)) t += num(f[k]); }); sh.querySelector('#stTot').innerHTML = 'Total: <b class="' + (Math.abs(t - 100) > 0.01 ? 'warn' : 'up') + '">' + fmtN(t, 1) + '%</b>'; };
+    sh.addEventListener('input', tot); tot();
   }
   // ----- property: market price from screenshots of sales (Brickz) or listings (PropertyGuru) -----
   function mktInfo(h) {
@@ -831,7 +882,7 @@
       <button type="button" data-act="addHolding">📈<span>Investment</span></button><button type="button" data-act="addOwed" data-dir="in">🤝<span>Someone owes me</span></button>
       <button type="button" data-act="addLoan">🏦<span>Loan</span></button><button type="button" data-act="addPolicy">🛡️<span>Insurance</span></button></div>`),
     addTxn: (ds) => { const d = txnForm(); if (ds.type) { const r = d.querySelector('input[name=type][value=' + ds.type + ']'); r.checked = true; txnTypeUI(d, ds.type); } if (ds.relief) { d.querySelector('[name=relief]').value = ds.relief; const h = d.querySelector('input[name=catE][value=shopping]'); if (h) h.checked = true; } },
-    editTxn: (ds) => { const t = state.txns.find((x) => x.id === ds.id); const h = t && t.inv && state.holdings.find((x) => x.id === t.inv.holding); if (h && t.inv.lot && h.lots.some((l) => l.id === t.inv.lot)) holdingDetail(h); else txnForm(t); },
+    editTxn: (ds) => { const t = state.txns.find((x) => x.id === ds.id); const h = t && t.inv && state.holdings.find((x) => x.id === t.inv.holding); if (h && (!t.inv.lot || (h.lots || []).some((l) => l.id === t.inv.lot))) holdingDetail(h); else txnForm(t); },
     delTxn: (ds) => { if (!confirmBox('Delete this record?')) return; const t = state.txns.find((x) => x.id === ds.id); (t.receipts || []).forEach((id) => S.delImg(id)); state.txns = state.txns.filter((x) => x.id !== ds.id); save(); closeSheet(); render(); },
     rmReceipt: (ds) => { draftReceipts = draftReceipts.filter((x) => x !== ds.id); drawThumbs(); },
     viewImg: async (ds) => { const src = await S.getImg(ds.id); const w = document.createElement('div'); w.className = 'viewer'; w.innerHTML = '<img src="' + src + '"><button class="icon">✕</button>'; w.onclick = () => w.remove(); document.body.appendChild(w); },
@@ -847,6 +898,11 @@
     lot: (ds) => lotForm(state.holdings.find((h) => h.id === ds.id), ds.t),
     delLot: (ds) => { const h = state.holdings.find((x) => x.id === ds.id); const linked = state.txns.some((t) => t.inv && t.inv.lot === ds.lot); if (!confirmBox(linked ? 'Remove this entry and its money record? The account balance goes back.' : 'Remove this entry?')) return; h.lots = h.lots.filter((l) => l.id !== ds.lot); state.txns = state.txns.filter((t) => !(t.inv && t.inv.lot === ds.lot)); save(); render(); holdingDetail(h); },
     symSearch: () => symSearch(),
+    offBill: (ds) => offBill(state.holdings.find((x) => x.id === ds.id), Number(ds.i)),
+    offPay: (ds) => offPay(state.holdings.find((x) => x.id === ds.id), Number(ds.i)),
+    offStages: (ds) => offStages(state.holdings.find((x) => x.id === ds.id)),
+    offUndo: (ds) => { const h = state.holdings.find((x) => x.id === ds.id), s = h.offplan.stages[Number(ds.i)]; if (!confirmBox('Mark “' + s.l + '” as not paid?' + (s.txn ? ' Its money record is removed too.' : ''))) return; if (s.txn) state.txns = state.txns.filter((t) => t.id !== s.txn); delete s.paid; delete s.txn; save(); render(); holdingDetail(h); },
+    offKeys: (ds) => { const h = state.holdings.find((x) => x.id === ds.id), st = C.offplanStatus(h); if (!confirmBox('Got the keys? The property is then valued at ' + rm(st.net, { d: 0 }) + ' from today, and you can check its market price. Remaining stages stay on record.')) return; Object.assign(h.offplan, { done: true, vpDate: C.today() }); h.value = st.net; h.valueAt = C.today(); if (!h.cost) h.cost = st.net; save(); render(); holdingDetail(h); toast('🔑 Congratulations on your new home!', 3500); },
     mktCheck: (ds) => mktCheck(state.holdings.find((x) => x.id === ds.id)),
     mktRead: (ds) => mktRead(state.holdings.find((x) => x.id === ds.id)),
     mktImgs: async (ds) => { const h = state.holdings.find((x) => x.id === ds.id); const imgs = []; for (const id of (h.mkt && h.mkt.imgs) || []) { const s = await S.getImg(id); if (s) imgs.push(s); } if (!imgs.length) { toast('Screenshots not found on this phone'); return; } openSheet('Screenshots · ' + h.name, imgs.map((s) => '<img src="' + s + '" style="width:100%;border-radius:10px;margin-bottom:8px">').join('')); },
@@ -1097,7 +1153,7 @@
       ${line('Total assets', s.assets, 'total')}
       <h4>Liabilities</h4>${loans.map((l) => line(l.name, C.loanStatus(l).balance)).join('')}
       ${accs.filter((a) => (bal[a.id] || 0) < 0).map((a) => line(a.name, -(bal[a.id] || 0))).join('')}
-      ${s.iOwe + s.splitOut ? line('Amounts I owe', s.iOwe + s.splitOut) : ''}
+      ${s.iOwe + s.splitOut ? line('Amounts I owe', s.iOwe + s.splitOut) : ''}${s.devOwe ? line('Balance purchase price owed to developer', s.devOwe) : ''}
       ${line('Total liabilities', s.liabilities, 'total')}
       ${line('NET WORTH', s.netWorth, 'grand')}`;
   }
